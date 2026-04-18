@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Крик души — TECH7GROUP</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Jost:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:    #1A1916;
+  --amber: #C49448;
+  --cream: #EDE6D3;
+  --gray:  #8A8274;
+  --mute:  #4A4840;
+  --rule:  #2A2925;
+  /* Правильная высота для iOS Safari */
+  --vh: 1vh;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  font-family: 'Jost', sans-serif;
+  color: var(--cream);
+  overflow: hidden; /* скролл только внутри контейнера */
+}
+
+/* ── ПРОГРЕСС ── */
+.progress-bar {
+  position: fixed; top: 0; left: 0;
+  height: 3px; background: var(--amber);
+  width: 0%; z-index: 200;
+  transition: width 0.1s linear;
+}
+
+/* ── NAV ── */
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 48px; height: 58px;
+  background: rgba(26,25,22,0.97);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--rule);
+}
+.nav-logo {
+  font-family: 'Jost', sans-serif; font-weight: 600;
+  font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--cream);
+}
+.nav-logo em { color: var(--amber); font-style: normal; }
+.nav-links { display: flex; gap: 32px; list-style: none; }
+.nav-links a {
+  font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--gray); text-decoration: none; transition: color 0.2s;
+}
+.nav-links a:hover { color: var(--amber); }
+.nav-tg {
+  font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--amber); text-decoration: none; font-weight: 600;
+  border: 1px solid var(--amber); padding: 8px 18px; transition: all 0.2s;
+}
+.nav-tg:hover { background: var(--amber); color: var(--bg); }
+
+/* ── СЧЁТЧИК ── */
+.line-counter {
+  position: fixed; bottom: 32px; right: 40px;
+  z-index: 100; text-align: right;
+  opacity: 0; transition: opacity 0.4s; pointer-events: none;
+}
+.line-counter.visible { opacity: 1; }
+.counter-current {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 44px; color: var(--amber); line-height: 1;
+}
+.counter-total { font-size: 10px; color: var(--mute); letter-spacing: 0.1em; }
+
+/* ── SCROLL HINT ── */
+.scroll-hint {
+  position: fixed; bottom: 36px; left: 50%;
+  transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  z-index: 100; transition: opacity 0.4s;
+}
+.scroll-hint.hidden { opacity: 0; pointer-events: none; }
+.s-dot {
+  width: 4px; height: 4px; background: var(--amber);
+  border-radius: 50%; animation: sdot 1.4s ease infinite;
+}
+.s-dot:nth-child(2) { animation-delay: 0.2s; }
+.s-dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes sdot { 0%,100%{opacity:0.2} 50%{opacity:1} }
+.scroll-hint span {
+  font-size: 9px; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--mute);
+}
+
+/* ══════════════════════════════════════
+   ГЛАВНЫЙ КОНТЕЙНЕР — CSS SCROLL SNAP
+   Это ключевое решение для мобильного
+══════════════════════════════════════ */
+.snap-container {
+  height: calc(var(--vh, 1vh) * 100 - 58px); /* минус навбар */
+  margin-top: 58px;
+  overflow-y: scroll;
+  scroll-snap-type: y mandatory;
+  -webkit-overflow-scrolling: touch; /* плавность на iOS */
+}
+
+/* Каждый экран — ровно один viewport */
+.snap-screen {
+  height: calc(var(--vh, 1vh) * 100 - 58px);
+  scroll-snap-align: start;
+  scroll-snap-stop: always; /* останавливается на каждом */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  border-bottom: 1px solid var(--rule);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+/* ── ПЕРВЫЙ ЭКРАН — СМОТРИ ── */
+.screen-intro {
+  flex-direction: column;
+  text-align: center;
+  padding: 40px;
+}
+.intro-word {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(100px, 20vw, 220px);
+  color: var(--amber); line-height: 0.85; letter-spacing: 0.03em;
+}
+.intro-sub {
+  font-size: clamp(11px, 2vw, 14px); color: var(--mute);
+  letter-spacing: 0.2em; text-transform: uppercase; margin-top: 20px;
+}
+
+/* ── СТРОКИ ── */
+.line-screen {
+  padding: 0 clamp(24px, 8vw, 100px);
+  justify-content: flex-start;
+}
+
+/* Левая янтарная полоса */
+.line-screen::before {
+  content: ''; position: absolute;
+  left: 0; top: 0; width: 3px; height: 0;
+  background: var(--amber); transition: height 0.8s ease;
+}
+.line-screen.active::before { height: 100%; }
+
+/* Большой номер на фоне */
+.line-bg-num {
+  position: absolute; right: -2vw;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(120px, 22vw, 280px);
+  color: rgba(196,148,72,0.04);
+  line-height: 1; user-select: none; pointer-events: none;
+  top: 50%; transform: translateY(-50%);
+}
+
+/* Номер блока */
+.block-num {
+  position: absolute; top: clamp(16px, 3vh, 28px); right: clamp(20px, 4vw, 48px);
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 13px; letter-spacing: 0.2em; color: var(--mute);
+}
+
+/* Текст — появляется при активации */
+.line-text {
+  font-size: clamp(22px, 4.5vw, 64px);
+  font-weight: 300; line-height: 1.4; color: var(--cream);
+  opacity: 0; transform: translateY(40px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+  position: relative; z-index: 1;
+  max-width: 900px;
+}
+.line-screen.active .line-text { opacity: 1; transform: translateY(0); }
+.line-screen.accent .line-text { font-size: clamp(24px, 5vw, 72px); }
+.line-screen.big .line-text    { font-size: clamp(28px, 5.5vw, 80px); }
+.line-text .a { color: var(--amber); }
+
+/* ── ФИНАЛЬНЫЙ ЭКРАН ── */
+.screen-final {
+  flex-direction: column; text-align: left; align-items: flex-start;
+  padding: 0 clamp(24px, 8vw, 100px);
+}
+.final-line1 {
+  font-size: clamp(18px, 3vw, 36px); color: var(--gray); font-weight: 300;
+  opacity: 0; transform: translateY(24px);
+  transition: all 0.6s ease;
+}
+.final-line2 {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(56px, 10vw, 130px);
+  color: var(--cream); line-height: 0.9; letter-spacing: 0.02em; margin-top: 8px;
+  opacity: 0; transform: translateY(24px);
+  transition: all 0.6s ease 0.15s;
+}
+.final-line2 .a { color: var(--amber); display: block; }
+.screen-final.active .final-line1,
+.screen-final.active .final-line2 { opacity: 1; transform: translateY(0); }
+
+/* ── КНОПКИ — тоже snap-screen ── */
+.screen-buttons {
+  scroll-snap-align: start;
+  height: auto;
+  min-height: calc(var(--vh, 1vh) * 100 - 58px);
+  display: flex; flex-direction: column;
+  border-top: 2px solid var(--amber);
+  flex-shrink: 0;
+}
+.btn-row-top {
+  display: grid; grid-template-columns: 1fr 1fr;
+  flex: 1;
+}
+.btn-hero {
+  padding: clamp(24px, 4vh, 44px) clamp(24px, 4vw, 56px);
+  border: none; cursor: pointer; text-decoration: none;
+  display: flex; flex-direction: column; gap: 8px;
+  transition: background 0.2s; font-family: 'Jost', sans-serif;
+}
+.btn-send {
+  background: var(--amber);
+  border-right: 1px solid rgba(0,0,0,0.1);
+}
+.btn-send:hover { background: #B8883C; }
+.btn-send .btn-label {
+  font-size: clamp(13px, 2vw, 17px); font-weight: 700;
+  letter-spacing: 0.06em; color: var(--bg); text-transform: uppercase;
+  display: flex; align-items: center; gap: 10px;
+}
+.btn-send .btn-sub { font-size: clamp(10px, 1.5vw, 13px); color: rgba(26,25,22,0.5); }
+.btn-arrow { font-size: 20px; transition: transform 0.2s; display: inline-block; }
+.btn-send:hover .btn-arrow { transform: translateX(5px); }
+
+.btn-discuss {
+  background: transparent;
+  border-left: 1px solid var(--rule);
+}
+.btn-discuss:hover { background: rgba(196,148,72,0.04); }
+.btn-discuss .btn-label {
+  font-size: clamp(13px, 2vw, 17px); font-weight: 700;
+  letter-spacing: 0.06em; color: var(--cream); text-transform: uppercase;
+  display: flex; align-items: center; gap: 10px;
+}
+.btn-discuss .btn-sub { font-size: clamp(10px, 1.5vw, 13px); color: var(--gray); }
+.btn-discuss:hover .btn-arrow { transform: translateX(5px); }
+
+.btn-center {
+  display: block; margin: clamp(12px, 2vh, 20px) clamp(20px, 4vw, 48px);
+  padding: clamp(16px, 2.5vh, 28px) 24px;
+  background: rgba(255,255,255,0.03);
+  border: 1px dashed var(--mute); border-radius: 2px;
+  cursor: pointer; text-decoration: none; text-align: center;
+  font-family: 'Jost', sans-serif; opacity: 0.5; transition: opacity 0.2s;
+}
+.btn-center:hover { opacity: 0.7; }
+.btn-center .btn-label {
+  font-size: clamp(12px, 1.8vw, 16px); color: var(--gray);
+  font-weight: 400; font-style: italic; line-height: 1.5;
+}
+.btn-center .btn-sub {
+  font-size: clamp(9px, 1.3vw, 11px); color: var(--mute);
+  margin-top: 6px; letter-spacing: 0.08em;
+}
+
+/* ── МОБИЛЬ ── */
+@media (max-width: 768px) {
+  nav { padding: 0 20px; }
+  .nav-links { display: none; }
+  .nav-tg { padding: 7px 14px; font-size: 10px; }
+  .line-bg-num { display: none; }
+  .line-counter { bottom: 20px; right: 16px; }
+  .counter-current { font-size: 32px; }
+  .btn-row-top { grid-template-columns: 1fr; }
+  .btn-send { border-right: none; border-bottom: 1px solid rgba(0,0,0,0.15); }
+  .btn-discuss { border-left: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="progress-bar" id="progress"></div>
+
+<div class="line-counter" id="lineCounter">
+  <div class="counter-current" id="counterCurrent">01</div>
+  <div class="counter-total">/ 16</div>
+</div>
+
+<div class="scroll-hint" id="scrollHint">
+  <div class="s-dot"></div>
+  <div class="s-dot"></div>
+  <div class="s-dot"></div>
+  <span>скролл</span>
+</div>
+
+<nav>
+  <div class="nav-logo">TECH<em>7</em>GROUP</div>
+  <ul class="nav-links">
+    <li><a href="#">Услуги</a></li>
+    <li><a href="#">Портфолио</a></li>
+    <li><a href="#">О нас</a></li>
+  </ul>
+  <a href="https://t.me/tech7group01" class="nav-tg">@tech7group01</a>
+</nav>
+
+<!-- ГЛАВНЫЙ КОНТЕЙНЕР -->
+<div class="snap-container" id="snapContainer">
+
+  <!-- СМОТРИ -->
+  <div class="snap-screen screen-intro" data-num="0">
+    <div class="intro-word">Смотри.</div>
+    <div class="intro-sub">это про твой бизнес</div>
+  </div>
+
+  <!-- 01 -->
+  <div class="snap-screen line-screen" data-num="01">
+    <div class="line-bg-num">01</div>
+    <div class="block-num">01 / 16</div>
+    <div class="line-text">Вот ты заключил договор.</div>
+  </div>
+
+  <!-- 02 -->
+  <div class="snap-screen line-screen" data-num="02">
+    <div class="line-bg-num">02</div>
+    <div class="block-num">02 / 16</div>
+    <div class="line-text">Взял аванс.</div>
+  </div>
+
+  <!-- 03 -->
+  <div class="snap-screen line-screen" data-num="03">
+    <div class="line-bg-num">03</div>
+    <div class="block-num">03 / 16</div>
+    <div class="line-text">Запустил менеджера и конструктора — или <span class="a">фрилансера</span>.</div>
+  </div>
+
+  <!-- 04 -->
+  <div class="snap-screen line-screen" data-num="04">
+    <div class="line-bg-num">04</div>
+    <div class="block-num">04 / 16</div>
+    <div class="line-text">И вот ты платишь аренду...</div>
+  </div>
+
+  <!-- 05 -->
+  <div class="snap-screen line-screen" data-num="05">
+    <div class="line-bg-num">05</div>
+    <div class="block-num">05 / 16</div>
+    <div class="line-text">зарплаты...</div>
+  </div>
+
+  <!-- 06 -->
+  <div class="snap-screen line-screen" data-num="06">
+    <div class="line-bg-num">06</div>
+    <div class="block-num">06 / 16</div>
+    <div class="line-text">маркетинг...</div>
+  </div>
+
+  <!-- 07 -->
+  <div class="snap-screen line-screen accent" data-num="07">
+    <div class="line-bg-num">07</div>
+    <div class="block-num">07 / 16</div>
+    <div class="line-text">а заказ всё ещё <span class="a">не согласован и не запущен в работу.</span></div>
+  </div>
+
+  <!-- 08 -->
+  <div class="snap-screen line-screen" data-num="08">
+    <div class="line-bg-num">08</div>
+    <div class="block-num">08 / 16</div>
+    <div class="line-text">Потому что менеджер делает <span class="a">всё для клиента</span>.</div>
+  </div>
+
+  <!-- 09 -->
+  <div class="snap-screen line-screen" data-num="09">
+    <div class="line-bg-num">09</div>
+    <div class="block-num">09 / 16</div>
+    <div class="line-text">Конструктор делает <span class="a">всё медленно</span>.</div>
+  </div>
+
+  <!-- 10 -->
+  <div class="snap-screen line-screen" data-num="10">
+    <div class="line-bg-num">10</div>
+    <div class="block-num">10 / 16</div>
+    <div class="line-text">Фрилансер — свободный, делает <span class="a">всё когда захочет</span>.</div>
+  </div>
+
+  <!-- 11 -->
+  <div class="snap-screen line-screen" data-num="11">
+    <div class="line-bg-num">11</div>
+    <div class="block-num">11 / 16</div>
+    <div class="line-text">А когда сделал — <span class="a">переделывай</span>, потому что не так.</div>
+  </div>
+
+  <!-- 12 -->
+  <div class="snap-screen line-screen" data-num="12">
+    <div class="line-bg-num">12</div>
+    <div class="block-num">12 / 16</div>
+    <div class="line-text">И аванс уже потрачен.</div>
+  </div>
+
+  <!-- 13 -->
+  <div class="snap-screen line-screen" data-num="13">
+    <div class="line-bg-num">13</div>
+    <div class="block-num">13 / 16</div>
+    <div class="line-text">И производство стоит.</div>
+  </div>
+
+  <!-- 14 -->
+  <div class="snap-screen line-screen" data-num="14">
+    <div class="line-bg-num">14</div>
+    <div class="block-num">14 / 16</div>
+    <div class="line-text">И клиент начинает нервничать.</div>
+  </div>
+
+  <!-- 15 -->
+  <div class="snap-screen line-screen big" data-num="15">
+    <div class="line-bg-num">15</div>
+    <div class="block-num">15 / 16</div>
+    <div class="line-text">И никто не делает <span class="a">всё</span> для <span class="a">твоего бизнеса.</span></div>
+  </div>
+
+  <!-- 16 — ФИНАЛ -->
+  <div class="snap-screen screen-final" data-num="16">
+    <div class="final-line1">А ты просто хотел</div>
+    <div class="final-line2">нормально <span class="a">заработать.</span></div>
+  </div>
+
+  <!-- КНОПКИ -->
+  <div class="screen-buttons">
+    <div class="btn-row-top">
+      <a href="https://t.me/tech7group01" class="btn-hero btn-send">
+        <span class="btn-label">Пришли задачу <span class="btn-arrow">→</span></span>
+        <span class="btn-sub">Telegram · @tech7group01 · ответим за 30 минут</span>
+      </a>
+      <a href="https://t.me/tech7group01" class="btn-hero btn-discuss">
+        <span class="btn-label">Запишись на онлайн-экскурсию <span class="btn-arrow">→</span></span>
+        <span class="btn-sub">25 минут · без обязательств · покажем как работаем</span>
+      </a>
+    </div>
+    <a href="https://www.avito.ru/rossiya/predlozheniya_uslug?q=конструктор+мебели"
+       target="_blank" class="btn-center">
+      <div class="btn-label">😌 &nbsp;Мне норм работать на свой бизнес, а не на оборот. Оставлю всё как есть.</div>
+      <div class="btn-sub">← авито · конструктор мебели · удачи</div>
+    </a>
+  </div>
+
+</div>
+
+<script>
+// ── ФИКС 100vh для iOS Safari ──
+// Используем window.innerHeight вместо 100vh
+function setVh() {
+  const vh = window.innerHeight * 0.01;
+  document.documentElement.style.setProperty('--vh', `${vh}px`);
+}
+setVh();
+window.addEventListener('resize', setVh);
+
+// ── ПРОГРЕСС + СЧЁТЧИК + АНИМАЦИИ ──
+const container   = document.getElementById('snapContainer');
+const progress    = document.getElementById('progress');
+const scrollHint  = document.getElementById('scrollHint');
+const lineCounter = document.getElementById('lineCounter');
+const counterEl   = document.getElementById('counterCurrent');
+const screens     = document.querySelectorAll('.snap-screen');
+
+container.addEventListener('scroll', () => {
+  // Прогресс
+  const maxScroll = container.scrollHeight - container.clientHeight;
+  const pct = maxScroll > 0 ? (container.scrollTop / maxScroll) * 100 : 0;
+  progress.style.width = pct + '%';
+
+  // Скролл хинт
+  if (container.scrollTop > 50) scrollHint.classList.add('hidden');
+  else scrollHint.classList.remove('hidden');
+
+  // Активируем экраны которые видны
+  const containerRect = container.getBoundingClientRect();
+  screens.forEach(screen => {
+    const rect = screen.getBoundingClientRect();
+    // Экран считается активным если он больше чем на 30% в зоне видимости
+    const visibleTop    = Math.max(rect.top, containerRect.top);
+    const visibleBottom = Math.min(rect.bottom, containerRect.bottom);
+    const visibleHeight = visibleBottom - visibleTop;
+    const screenHeight  = rect.height;
+
+    if (visibleHeight / screenHeight > 0.3) {
+      screen.classList.add('active');
+      const num = screen.dataset.num;
+      if (num && num !== '0') {
+        counterEl.textContent = num.padStart(2, '0');
+        lineCounter.classList.add('visible');
+      }
+    }
+  });
+}, { passive: true });
+
+// Первая активация первого экрана
+setTimeout(() => {
+  if (screens[0]) screens[0].classList.add('active');
+}, 100);
+</script>
+</body>
+</html>
