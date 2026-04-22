@@ -175,10 +175,18 @@ function calc(p){
 
   // --- Разбивка по ширине ---
   // Правило: макс 2 фасада на модуль, каждый фасад ≤600мм
-  // Сначала определим кол-во колонок
-  const totalDoors=p.doors;
+  // Шаг 1: начинаем с заданного кол-ва дверей
+  let totalDoors=p.doors;
+
+  // Шаг 2: проверяем — хватает ли дверей чтобы фасад ≤600мм
+  // Минимальное кол-во дверей при данной ширине:
+  // facadeW ≈ totalW / doors (грубо, без зазоров и толщин боковин)
+  // Точнее: при N колонок, ширина колонки = totalW/N, фасад ≈ (colW - зазоры) / doorsInCol
+  // Но проще: нужно столько дверей чтобы totalW / totalDoors ≤ 600
+  const minDoors=Math.ceil(totalW/MAX_FACADE_W);
+  if(totalDoors<minDoors) totalDoors=minDoors;
+
   const cols=Math.ceil(totalDoors/2); // макс 2 двери на модуль
-  // Ширина каждой колонки
   const colWidths=[];
   const colDoors=[];
   let doorsLeft=totalDoors;
@@ -188,15 +196,12 @@ function calc(p){
     doorsLeft-=d;
   }
   // Равномерная ширина колонок
-  // Но! Соседние модули делят боковину — нет, в реальности каждый модуль отдельный корпус
-  // Сумма ширин колонок = totalW
   const colW=Math.floor(totalW/cols);
   const lastColW=totalW-(cols-1)*colW;
   for(let c=0;c<cols;c++) colWidths.push(c===cols-1?lastColW:colW);
 
-  // Проверка: фасады ≤600мм
-  // Если фасад всё равно >600, значит ширина колонки слишком большая — нужно больше колонок
-  // Но по правилу это уже решено через кол-во дверей
+  // Финальная проверка: фасад в каждой колонке ≤600мм
+  // Фасад ≈ (colWidth - 32 - (doors-1)*gap) / doors — но мы уже подстраховались через minDoors
 
   // --- Создаём сетку модулей ---
   const grid=[]; // grid[row][col]
@@ -634,7 +639,7 @@ function App(){
   const[d,sD]=useState(600);
   const[niche,sNi]=useState(false);
   const[bt,sBt]=useState("8");
-  const[doors,sDo]=useState(2);
+  const[doors,sDo]=useState(4);
   const[nS,sNS]=useState(5);
   const[nD,sND]=useState(2);
   const[rod,sRod]=useState(true);
@@ -705,12 +710,17 @@ function App(){
             opts={[{v:"8",l:"ЛДСП 8мм (четверть, саморезы)"},{v:"16",l:"ЛДСП 16мм (конфирмат)"}]}/>
         </Card>
         <Card title="Фасады (распашные)">
-          <In l="Количество дверей" v={doors} set={sDo} mn={1} mx={6}/>
+          <In l="Количество дверей (общее)" v={doors} set={sDo} mn={1} mx={12}/>
           <Sel l="Зазор между фасадами" v={fg} set={v=>sFg(Number(v))}
             opts={[{v:2,l:"2 мм"},{v:3,l:"3 мм"}]}/>
           <div style={{padding:"8px 12px",background:C.inputBg,borderRadius:8,fontSize:12,color:C.textDim}}>
             Фасад: {r.dim.fH}×{r.dim.fW} мм • Зазор: {r.dim.fG}мм • Петель: {r.dim.hpp}
-            {r.cols>1&&<div style={{marginTop:4,color:C.accent}}>Модулей по ширине: {r.cols} (по {r.colDoors.join("+")} дв.)</div>}
+            {r.cols>1&&<div style={{marginTop:4,color:C.accent}}>
+              {r.cols} модул{r.cols<5?"я":"ей"} по ширине ({r.colDoors.map((d,i)=>d+" дв.×"+r.colWidths[i]+"мм").join(", ")})
+            </div>}
+            {r.colDoors.reduce((a,b)=>a+b,0)>doors&&<div style={{marginTop:4,color:C.red}}>
+              ⚠ Дверей увеличено до {r.colDoors.reduce((a,b)=>a+b,0)} (фасад должен быть ≤600мм)
+            </div>}
           </div>
         </Card>
         <Card title="Наполнение">
