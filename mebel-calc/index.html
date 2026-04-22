@@ -160,43 +160,88 @@ function calcModule(p, moduleType, moduleH, moduleW, lowerH){
   return{det,hw,e04:em04,e1:em1,cutM,drTorz,costs:{l:lC,b:bC,dv:dvC,pr:prC,ed:edC,hw:hwC,pack:packC,t:tot},sheets,dim:{cH:moduleH,cW:moduleW,iW,fH,fW,fG,hpp},moduleType};
 }
 
-// Главная функция: решает — один модуль или два
+// Главная функция: сетка модулей cols × rows
 function calc(p){
-  const totalH=p.cH-8; // высота корпуса с зазором до потолка
-  const cW=p.niche?p.nW-5:p.nW;
-  const LOWER_H=2100; // фиксированная высота нижнего модуля
+  const totalH=p.cH-8;
+  const totalW=p.niche?p.nW-5:p.nW;
+  const LOWER_H=2100;
+  const MAX_FACADE_W=600;
 
-  // Если помещается в один модуль
-  if(totalH<=2770){
-    const r=calcModule(p,"single",totalH,cW,0);
-    return{modules:[r],split:false,totalH,cW,
-      costs:{l:r.costs.l,b:r.costs.b,dv:r.costs.dv,pr:r.costs.pr,ed:r.costs.ed,hw:r.costs.hw,pack:r.costs.pack,t:r.costs.t},
-      det:r.det,hw:r.hw,e04:r.e04,e1:r.e1,cutM:r.cutM,drTorz:r.drTorz,sheets:r.sheets,
-      dim:r.dim};
+  // --- Разбивка по высоте ---
+  const splitV=totalH>2770;
+  const lowerH=splitV?LOWER_H:totalH;
+  const antresolH=splitV?totalH-LOWER_H:0;
+  const rows=splitV?2:1; // row 0 = нижний, row 1 = антресоль
+
+  // --- Разбивка по ширине ---
+  // Правило: макс 2 фасада на модуль, каждый фасад ≤600мм
+  // Сначала определим кол-во колонок
+  const totalDoors=p.doors;
+  const cols=Math.ceil(totalDoors/2); // макс 2 двери на модуль
+  // Ширина каждой колонки
+  const colWidths=[];
+  const colDoors=[];
+  let doorsLeft=totalDoors;
+  for(let c=0;c<cols;c++){
+    const d=Math.min(2,doorsLeft);
+    colDoors.push(d);
+    doorsLeft-=d;
+  }
+  // Равномерная ширина колонок
+  // Но! Соседние модули делят боковину — нет, в реальности каждый модуль отдельный корпус
+  // Сумма ширин колонок = totalW
+  const colW=Math.floor(totalW/cols);
+  const lastColW=totalW-(cols-1)*colW;
+  for(let c=0;c<cols;c++) colWidths.push(c===cols-1?lastColW:colW);
+
+  // Проверка: фасады ≤600мм
+  // Если фасад всё равно >600, значит ширина колонки слишком большая — нужно больше колонок
+  // Но по правилу это уже решено через кол-во дверей
+
+  // --- Создаём сетку модулей ---
+  const grid=[]; // grid[row][col]
+  const allDet=[], allHw=[];
+  const allCosts={l:0,b:0,dv:0,pr:0,ed:0,hw:0,pack:0,t:0};
+  let allSheets=0,allE04=0,allE1=0,allCutM=0;
+
+  for(let row=0;row<rows;row++){
+    grid[row]=[];
+    const isAnt=row===1;
+    const modH=isAnt?antresolH:lowerH;
+    for(let col=0;col<cols;col++){
+      const modW=colWidths[col];
+      const modDoors=isAnt?colDoors[col]:colDoors[col]; // антресоль наследует кол-во дверей от колонки
+      const label="["+(row===0?"Н":"А")+(cols>1?(col+1):"")+ "] ";
+      // Создаём параметры для этого модуля
+      const mp={...p, doors:modDoors, antresolDoors:modDoors};
+      const m=calcModule(mp, isAnt?"antresol":(splitV?"lower":"single"), modH, modW, 0);
+      // Добавляем метки
+      if(cols>1||rows>1){
+        m.det.forEach(d=>{ if(!d.n.startsWith("[")) d.n=label+d.n; });
+        m.hw.forEach(h=>{ if(!h.n.startsWith("[")) h.n=label+h.n; });
+      }
+      m.col=col; m.row=row; m.label=label.trim();
+      grid[row][col]=m;
+      allDet.push(...m.det);
+      allHw.push(...m.hw);
+      Object.keys(allCosts).forEach(k=>allCosts[k]+=m.costs[k==="t"?"t":k]);
+      allSheets+=m.sheets;
+      allE04+=m.e04; allE1+=m.e1; allCutM+=m.cutM;
+    }
   }
 
-  // Разбивка: нижний 2100 + антресоль (остаток)
-  const antresolH=totalH-LOWER_H;
-  const lower=calcModule(p,"lower",LOWER_H,cW,0);
-  const upper=calcModule(p,"antresol",antresolH,cW,LOWER_H);
-
-  // Суммируем
-  const det=[...lower.det,...upper.det];
-  const hw=[...lower.hw,...upper.hw];
-  const costs={
-    l:lower.costs.l+upper.costs.l, b:lower.costs.b+upper.costs.b,
-    dv:lower.costs.dv+upper.costs.dv, pr:lower.costs.pr+upper.costs.pr,
-    ed:lower.costs.ed+upper.costs.ed, hw:lower.costs.hw+upper.costs.hw,
-    pack:lower.costs.pack+upper.costs.pack,
-    t:lower.costs.t+upper.costs.t
+  return{
+    grid, cols, rows, splitV, splitH:cols>1,
+    totalH, totalW, lowerH, antresolH,
+    colWidths, colDoors,
+    costs:allCosts, det:allDet, hw:allHw,
+    e04:allE04, e1:allE1, cutM:allCutM, sheets:allSheets,
+    dim:grid[0][0].dim, // для обратной совместимости
+    // Compat fields
+    modules:grid.flat(),
+    split:rows>1||cols>1,
+    cW:totalW
   };
-
-  return{modules:[lower,upper],split:true,totalH,cW,lowerH:LOWER_H,antresolH,
-    costs,det,hw,
-    e04:lower.e04+upper.e04, e1:lower.e1+upper.e1,
-    cutM:lower.cutM+upper.cutM, drTorz:lower.drTorz+upper.drTorz,
-    sheets:lower.sheets+upper.sheets,
-    dim:lower.dim};
 }
 
 function In({l,v,set,u="мм",mn=0,mx=9999,st=1}){
@@ -383,21 +428,15 @@ function CuttingMap({details}){
 }
 
 function SketchView({r, params}){
-  const[mode,setMode]=useState("closed"); // closed = с фасадами, open = без фасадов
+  const[mode,setMode]=useState("closed");
   const PAD=40, DIM_OFF=28, FONT="'JetBrains Mono',monospace";
-  const modules=r.split?r.modules:[{...r,moduleType:"single"}];
+  const {grid, cols, rows, totalH, totalW, colWidths, splitV, antresolH, lowerH}=r;
 
-  // Суммарная высота для SVG
-  const totalH=r.split?(r.lowerH+r.antresolH):r.dim.cH;
-  const totalW=r.cW||r.dim.cW;
-
-  // Масштаб: вписываем в ~360px ширины
   const maxSvgW=360;
-  const sc=Math.min((maxSvgW-PAD*2)/totalW, (500-PAD*2)/totalH, 0.18);
+  const sc=Math.min((maxSvgW-PAD*2)/totalW, (520-PAD*2)/totalH, 0.16);
   const svgW=Math.ceil(totalW*sc)+PAD*2+DIM_OFF;
   const svgH=Math.ceil(totalH*sc)+PAD*2+DIM_OFF+20;
 
-  // Рисуем размерную линию
   function DimLine({x1,y1,x2,y2,label,side}){
     const mx=(x1+x2)/2, my=(y1+y2)/2;
     const isVert=x1===x2;
@@ -405,7 +444,6 @@ function SketchView({r, params}){
     const ty=isVert?my:(side==="top"?y1-8:y1+12);
     return <g>
       <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={C.textDim} strokeWidth={0.7} strokeDasharray="3,2"/>
-      {/* Засечки */}
       {isVert?<>
         <line x1={x1-3} y1={y1} x2={x1+3} y2={y1} stroke={C.textDim} strokeWidth={0.7}/>
         <line x1={x1-3} y1={y2} x2={x1+3} y2={y2} stroke={C.textDim} strokeWidth={0.7}/>
@@ -414,135 +452,120 @@ function SketchView({r, params}){
         <line x1={x2} y1={y1-3} x2={x2} y2={y1+3} stroke={C.textDim} strokeWidth={0.7}/>
       </>}
       <text x={tx} y={ty} textAnchor="middle" dominantBaseline="middle" fill={C.accent} fontSize={8} fontFamily={FONT}
-        transform={isVert?`rotate(-90,${tx},${ty})`:undefined}>{label}</text>
+        transform={isVert?"rotate(-90,"+tx+","+ty+")":undefined}>{label}</text>
     </g>;
   }
 
-  function drawModule(mod, offsetY, modH, modW, isAntresol){
-    const ox=PAD+DIM_OFF, oy=PAD+offsetY*sc;
+  function drawModule(mod, offsetX, offsetY, modW, modH, isAnt, keyPrefix){
+    const ox=PAD+DIM_OFF+offsetX*sc, oy=PAD+offsetY*sc;
     const w=modW*sc, h=modH*sc;
     const elems=[];
-    const iW=(modW-32)*sc, iH=h;
     const sideW=16*sc;
+    const k=keyPrefix;
 
-    // Корпус — боковины, дно, крыша
-    // Левая боковина
-    elems.push(<rect key="lb" x={ox} y={oy} width={sideW} height={h} fill={C.accent+"15"} stroke={C.accent} strokeWidth={0.8}/>);
-    // Правая боковина
-    elems.push(<rect key="rb" x={ox+w-sideW} y={oy} width={sideW} height={h} fill={C.accent+"15"} stroke={C.accent} strokeWidth={0.8}/>);
+    // Боковины
+    elems.push(<rect key={k+"lb"} x={ox} y={oy} width={sideW} height={h} fill={C.accent+"15"} stroke={C.accent} strokeWidth={0.8}/>);
+    elems.push(<rect key={k+"rb"} x={ox+w-sideW} y={oy} width={sideW} height={h} fill={C.accent+"15"} stroke={C.accent} strokeWidth={0.8}/>);
     // Крыша
-    elems.push(<rect key="top" x={ox+sideW} y={oy} width={w-sideW*2} height={sideW} fill={C.accent+"15"} stroke={C.accent} strokeWidth={0.8}/>);
+    elems.push(<rect key={k+"top"} x={ox+sideW} y={oy} width={w-sideW*2} height={sideW} fill={C.accent+"15"} stroke={C.accent} strokeWidth={0.8}/>);
 
-    if(!isAntresol){
-      // Дно на 60мм от пола
+    if(!isAnt){
       const bottomY=oy+h-60*sc;
-      elems.push(<rect key="btm" x={ox+sideW} y={bottomY} width={w-sideW*2} height={sideW} fill={C.accent+"15"} stroke={C.accent} strokeWidth={0.8}/>);
-      // Цоколь
+      elems.push(<rect key={k+"btm"} x={ox+sideW} y={bottomY} width={w-sideW*2} height={sideW} fill={C.accent+"15"} stroke={C.accent} strokeWidth={0.8}/>);
       const cokY=oy+h-44*sc;
-      elems.push(<rect key="cok" x={ox+sideW} y={cokY} width={w-sideW*2} height={44*sc} fill="none" stroke={C.textDim} strokeWidth={0.5} strokeDasharray="2,2"/>);
-      elems.push(<text key="cokL" x={ox+w/2} y={cokY+22*sc} textAnchor="middle" dominantBaseline="middle" fill={C.textDim} fontSize={6} fontFamily={FONT}>цоколь 44</text>);
+      elems.push(<rect key={k+"cok"} x={ox+sideW} y={cokY} width={w-sideW*2} height={44*sc} fill="none" stroke={C.textDim} strokeWidth={0.5} strokeDasharray="2,2"/>);
     } else {
-      // Антресоль — дно прямо у нижнего края
-      elems.push(<rect key="btm" x={ox+sideW} y={oy+h-sideW} width={w-sideW*2} height={sideW} fill={C.accent+"15"} stroke={C.accent} strokeWidth={0.8}/>);
+      elems.push(<rect key={k+"btm"} x={ox+sideW} y={oy+h-sideW} width={w-sideW*2} height={sideW} fill={C.accent+"15"} stroke={C.accent} strokeWidth={0.8}/>);
     }
 
     if(mode==="closed"){
-      // === ВИД С ФАСАДАМИ ===
-      const doors=isAntresol?params.antresolDoors:params.doors;
+      const nDoors=mod.dim.doorsInModule||r.colDoors[mod.col]||mod.dim.doors||2;
       const fg=mod.dim.fG;
       const fW=mod.dim.fW*sc;
       const fH=mod.dim.fH*sc;
-      const facadeY=oy+(isAntresol?sideW:sideW); // от крыши вниз
-      for(let i=0;i<doors;i++){
+      const facadeY=oy+sideW;
+      for(let i=0;i<nDoors;i++){
         const fx=ox+(i*(mod.dim.fW+fg))*sc;
-        elems.push(<rect key={"f"+i} x={fx} y={facadeY} width={fW} height={fH} fill={C.blue+"18"} stroke={C.blue} strokeWidth={1} rx={2}/>);
-        // Петли
+        elems.push(<rect key={k+"f"+i} x={fx} y={facadeY} width={fW} height={fH} fill={C.blue+"18"} stroke={C.blue} strokeWidth={1} rx={2}/>);
         const hpp=mod.dim.hpp;
         for(let hi=0;hi<hpp;hi++){
           const py=facadeY+fH*(hi+1)/(hpp+1);
-          const px=fx+3;
-          elems.push(<circle key={"h"+i+"_"+hi} cx={px} cy={py} r={2.5} fill="none" stroke={C.accent} strokeWidth={0.7}/>);
+          elems.push(<circle key={k+"h"+i+"_"+hi} cx={fx+3} cy={py} r={2.5} fill="none" stroke={C.accent} strokeWidth={0.7}/>);
         }
-        // Размер фасада
         if(i===0){
-          elems.push(<text key="fdim" x={fx+fW/2} y={facadeY+fH/2} textAnchor="middle" dominantBaseline="middle" fill={C.blue} fontSize={7} fontFamily={FONT} opacity={0.8}>{mod.dim.fH}×{mod.dim.fW}</text>);
+          elems.push(<text key={k+"fdim"} x={fx+fW/2} y={facadeY+fH/2} textAnchor="middle" dominantBaseline="middle" fill={C.blue} fontSize={w>60?7:5} fontFamily={FONT} opacity={0.8}>{mod.dim.fH}×{mod.dim.fW}</text>);
         }
       }
-      // Зазоры между фасадами
-      if(doors>1){
-        for(let i=0;i<doors-1;i++){
+      if(nDoors>1){
+        for(let i=0;i<nDoors-1;i++){
           const gx=ox+((i+1)*mod.dim.fW+i*fg)*sc;
-          elems.push(<line key={"gap"+i} x1={gx} y1={facadeY} x2={gx} y2={facadeY+fH} stroke={C.red} strokeWidth={0.5} strokeDasharray="2,1"/>);
+          elems.push(<line key={k+"gap"+i} x1={gx} y1={facadeY} x2={gx} y2={facadeY+fH} stroke={C.red} strokeWidth={0.5} strokeDasharray="2,1"/>);
         }
       }
     } else {
-      // === ВИД БЕЗ ФАСАДОВ (наполнение) ===
       const innerX=ox+sideW;
       const innerTop=oy+sideW;
-      const innerBot=oy+h-(isAntresol?sideW:60*sc);
+      const innerBot=oy+h-(isAnt?sideW:60*sc);
       const innerH=innerBot-innerTop;
       const innerWpx=w-sideW*2;
 
-      if(!isAntresol){
-        // Штанга
+      if(!isAnt){
         if(params.rod){
           const rodY=oy+h-1800*sc;
           if(rodY>innerTop){
-            elems.push(<line key="rod" x1={innerX+10} y1={rodY} x2={innerX+innerWpx-10} y2={rodY} stroke={C.green} strokeWidth={2} strokeLinecap="round"/>);
-            elems.push(<circle key="rodL" cx={innerX+10} cy={rodY} r={3} fill={C.green+"44"} stroke={C.green} strokeWidth={0.7}/>);
-            elems.push(<circle key="rodR" cx={innerX+innerWpx-10} cy={rodY} r={3} fill={C.green+"44"} stroke={C.green} strokeWidth={0.7}/>);
-            elems.push(<text key="rodT" x={innerX+innerWpx/2} y={rodY-6} textAnchor="middle" fill={C.green} fontSize={6} fontFamily={FONT}>штанга 1800</text>);
+            elems.push(<line key={k+"rod"} x1={innerX+4} y1={rodY} x2={innerX+innerWpx-4} y2={rodY} stroke={C.green} strokeWidth={2} strokeLinecap="round"/>);
+            elems.push(<circle key={k+"rodL"} cx={innerX+4} cy={rodY} r={2} fill={C.green+"44"} stroke={C.green} strokeWidth={0.7}/>);
+            elems.push(<circle key={k+"rodR"} cx={innerX+innerWpx-4} cy={rodY} r={2} fill={C.green+"44"} stroke={C.green} strokeWidth={0.7}/>);
+            if(innerWpx>40) elems.push(<text key={k+"rodT"} x={innerX+innerWpx/2} y={rodY-5} textAnchor="middle" fill={C.green} fontSize={5} fontFamily={FONT}>штанга</text>);
 
-            // Полка над штангой
             if(params.shelfAboveRod){
               const shelfY=rodY-70*sc;
-              elems.push(<rect key="shar" x={innerX} y={shelfY} width={innerWpx} height={sideW} fill={C.accent+"22"} stroke={C.accent} strokeWidth={0.6}/>);
-              elems.push(<text key="sharT" x={innerX+innerWpx/2} y={shelfY-5} textAnchor="middle" fill={C.textDim} fontSize={5} fontFamily={FONT}>полка +70</text>);
+              elems.push(<rect key={k+"shar"} x={innerX} y={shelfY} width={innerWpx} height={sideW} fill={C.accent+"22"} stroke={C.accent} strokeWidth={0.6}/>);
             }
           }
         }
-
-        // Полки (равномерно в верхней части)
         if(params.nS>0){
-          const shelfZone=innerH*0.45; // верхние 45%
+          const shelfZone=innerH*0.4;
           const gap=shelfZone/(params.nS+1);
           for(let i=0;i<params.nS;i++){
             const sy=innerTop+gap*(i+1);
-            elems.push(<rect key={"sh"+i} x={innerX} y={sy} width={innerWpx} height={sideW} fill={C.accent+"22"} stroke={C.accent} strokeWidth={0.6}/>);
-            // Полкодержатели
-            elems.push(<circle key={"pkl"+i} cx={innerX+4} cy={sy+sideW/2} r={1.5} fill={C.accent}/>);
-            elems.push(<circle key={"pkr"+i} cx={innerX+innerWpx-4} cy={sy+sideW/2} r={1.5} fill={C.accent}/>);
+            elems.push(<rect key={k+"sh"+i} x={innerX} y={sy} width={innerWpx} height={sideW} fill={C.accent+"22"} stroke={C.accent} strokeWidth={0.6}/>);
           }
         }
-
-        // Ящики (внизу)
         if(params.nD>0){
           const drawerH=150*sc;
           const gapH=30*sc;
           for(let i=0;i<params.nD;i++){
             const dy=innerBot-((params.nD-i)*(drawerH+gapH));
-            // Короб ящика
-            elems.push(<rect key={"dr"+i} x={innerX+16*sc} y={dy} width={innerWpx-32*sc} height={drawerH} fill={C.red+"12"} stroke={C.red} strokeWidth={0.7} rx={1}/>);
-            // Ручка
+            elems.push(<rect key={k+"dr"+i} x={innerX+16*sc} y={dy} width={innerWpx-32*sc} height={drawerH} fill={C.red+"12"} stroke={C.red} strokeWidth={0.7} rx={1}/>);
             const hx=innerX+innerWpx/2;
-            elems.push(<line key={"drh"+i} x1={hx-12} y1={dy+drawerH/2} x2={hx+12} y2={dy+drawerH/2} stroke={C.red} strokeWidth={1.5} strokeLinecap="round"/>);
+            elems.push(<line key={k+"drh"+i} x1={hx-8} y1={dy+drawerH/2} x2={hx+8} y2={dy+drawerH/2} stroke={C.red} strokeWidth={1.5} strokeLinecap="round"/>);
           }
         }
       } else {
-        // Антресоль — полки
         const aShelves=params.antresolShelves||0;
         if(aShelves>0){
           const gap=innerH/(aShelves+1);
           for(let i=0;i<aShelves;i++){
             const sy=innerTop+gap*(i+1);
-            elems.push(<rect key={"ash"+i} x={innerX} y={sy} width={innerWpx} height={sideW} fill={C.accentDim+"33"} stroke={C.accentDim} strokeWidth={0.6}/>);
+            elems.push(<rect key={k+"ash"+i} x={innerX} y={sy} width={innerWpx} height={sideW} fill={C.accentDim+"33"} stroke={C.accentDim} strokeWidth={0.6}/>);
           }
         }
       }
     }
-
     return elems;
   }
+
+  // Вычисляем X-смещение для каждой колонки
+  const colOffsets=[0];
+  for(let c=1;c<cols;c++) colOffsets[c]=colOffsets[c-1]+colWidths[c-1];
+
+  // Высоты строк: row0=lower, row1=antresol (рисуем антресоль сверху)
+  const rowHeights=splitV?[antresolH, lowerH]:[totalH];
+  const rowOffsets=[0];
+  if(splitV) rowOffsets[1]=antresolH;
+
+  const totalModules=cols*rows;
 
   return <>
     <div style={{display:"flex",gap:6,marginBottom:12}}>
@@ -556,33 +579,50 @@ function SketchView({r, params}){
     </div>
     <div style={{background:C.card,borderRadius:12,padding:12,border:`1px solid ${C.border}`,overflowX:"auto"}}>
       <svg width={svgW} height={svgH} style={{display:"block",margin:"0 auto"}}>
-        {/* Фон */}
         <rect x={0} y={0} width={svgW} height={svgH} fill={C.bg} rx={8}/>
 
-        {r.split?<>
-          {/* Антресоль сверху */}
-          {drawModule(r.modules[1], 0, r.antresolH, r.cW, true)}
-          {/* Линия разделения */}
-          <line x1={PAD+DIM_OFF-5} y1={PAD+r.antresolH*sc} x2={PAD+DIM_OFF+r.cW*sc+5} y2={PAD+r.antresolH*sc} stroke={C.red} strokeWidth={1} strokeDasharray="4,3"/>
-          <text x={PAD+DIM_OFF+r.cW*sc+8} y={PAD+r.antresolH*sc} fill={C.red} fontSize={7} fontFamily={FONT} dominantBaseline="middle">стык</text>
-          {/* Нижний модуль */}
-          {drawModule(r.modules[0], r.antresolH, r.lowerH, r.cW, false)}
-
-          {/* Размеры */}
-          <DimLine x1={PAD+8} y1={PAD} x2={PAD+8} y2={PAD+r.antresolH*sc} label={r.antresolH+""} side="left"/>
-          <DimLine x1={PAD+8} y1={PAD+r.antresolH*sc} x2={PAD+8} y2={PAD+totalH*sc} label={r.lowerH+""} side="left"/>
+        {/* Рисуем все модули */}
+        {splitV?<>
+          {/* Антресоли (row 1 в grid, рисуем сверху) */}
+          {grid[1]&&grid[1].map((mod,col)=>
+            drawModule(mod, colOffsets[col], 0, colWidths[col], antresolH, true, "a"+col+"_")
+          )}
+          {/* Горизонтальная линия стыка */}
+          <line x1={PAD+DIM_OFF-5} y1={PAD+antresolH*sc} x2={PAD+DIM_OFF+totalW*sc+5} y2={PAD+antresolH*sc} stroke={C.red} strokeWidth={1} strokeDasharray="4,3"/>
+          {/* Нижние модули (row 0 в grid) */}
+          {grid[0].map((mod,col)=>
+            drawModule(mod, colOffsets[col], antresolH, colWidths[col], lowerH, false, "l"+col+"_")
+          )}
         </>:<>
-          {drawModule(r.modules?r.modules[0]:r, 0, r.dim.cH, r.dim.cW, false)}
+          {grid[0].map((mod,col)=>
+            drawModule(mod, colOffsets[col], 0, colWidths[col], totalH, false, "s"+col+"_")
+          )}
         </>}
 
-        {/* Общие размеры */}
+        {/* Вертикальные разделители между колонками */}
+        {cols>1&&colOffsets.slice(1).map((off,i)=>{
+          const x=PAD+DIM_OFF+off*sc;
+          return <line key={"vsep"+i} x1={x} y1={PAD-3} x2={x} y2={PAD+totalH*sc+3} stroke={C.red} strokeWidth={0.7} strokeDasharray="3,2"/>;
+        })}
+
+        {/* Размеры общие */}
         <DimLine x1={PAD} y1={PAD} x2={PAD} y2={PAD+totalH*sc} label={totalH+""} side="left"/>
+        {splitV&&<>
+          <DimLine x1={PAD+8} y1={PAD} x2={PAD+8} y2={PAD+antresolH*sc} label={antresolH+""} side="left"/>
+          <DimLine x1={PAD+8} y1={PAD+antresolH*sc} x2={PAD+8} y2={PAD+totalH*sc} label={lowerH+""} side="left"/>
+        </>}
         <DimLine x1={PAD+DIM_OFF} y1={PAD+totalH*sc+15} x2={PAD+DIM_OFF+totalW*sc} y2={PAD+totalH*sc+15} label={totalW+""} side="bottom"/>
+        {/* Размеры колонок */}
+        {cols>1&&colWidths.map((cw,i)=>{
+          const x1=PAD+DIM_OFF+colOffsets[i]*sc;
+          const x2=x1+cw*sc;
+          return <DimLine key={"cdim"+i} x1={x1} y1={PAD+totalH*sc+28} x2={x2} y2={PAD+totalH*sc+28} label={cw+""} side="bottom"/>;
+        })}
       </svg>
     </div>
     <div style={{marginTop:8,fontSize:11,color:C.textDim,textAlign:"center"}}>
       {mode==="closed"?"Вид спереди • фасады закрыты":"Вид спереди • наполнение"}
-      {r.split&&" • 2 модуля"}
+      {" • "+totalModules+" модул"+(totalModules===1?"ь":totalModules<5?"я":"ей")}
     </div>
   </>;
 }
@@ -619,7 +659,7 @@ function App(){
     <div style={{padding:"16px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
       <div>
         <h1 style={{margin:0,fontFamily:"'Bebas Neue',sans-serif",fontSize:24,color:C.accent,letterSpacing:2}}>МЕБЕЛЬ.КАЛК</h1>
-        <span style={{fontSize:10,color:C.textDim,letterSpacing:1}}>TECH7GROUP • v3{r.split?" • 2 модуля":""}</span>
+        <span style={{fontSize:10,color:C.textDim,letterSpacing:1}}>TECH7GROUP • v4{r.split?" • "+r.cols+"×"+r.rows:""}</span>
       </div>
       <div style={{textAlign:"right"}}>
         <div style={{fontSize:10,color:C.textDim}}>себес</div>
@@ -643,23 +683,20 @@ function App(){
           <Tog l="Встройка в нишу" v={niche} set={sNi}/>
           <div style={{marginTop:8,padding:"8px 12px",background:C.inputBg,borderRadius:8,fontSize:12,color:C.textDim}}>
             {r.split?<>
-              <div style={{color:C.accent,fontWeight:500,marginBottom:4}}>Разбивка на 2 модуля</div>
-              <div>Нижний: {r.lowerH}×{r.cW}×{d} мм</div>
-              <div>Антресоль: {r.antresolH}×{r.cW}×{d} мм</div>
+              <div style={{color:C.accent,fontWeight:500,marginBottom:4}}>
+                {r.cols}×{r.rows} = {r.cols*r.rows} модул{r.cols*r.rows<5?"я":"ей"}
+              </div>
+              {r.cols>1&&<div>Колонки: {r.colWidths.map((w,i)=>w+"мм").join(" + ")} = {r.totalW}мм</div>}
+              {r.splitV&&<div>Нижний: {r.lowerH}мм • Антресоль: {r.antresolH}мм</div>}
               <div style={{marginTop:4,color:C.textDim}}>Общая высота: {r.totalH}мм (потолок {cH} − 8)</div>
             </>:<>
               Корпус: {r.dim.cH}×{r.dim.cW}×{d} мм
-              {r.dim.cH>2770&&<div style={{color:C.red,marginTop:4}}>⚠ {r.dim.cH}мм &gt; 2770 — бить на модули!</div>}
             </>}
           </div>
         </Card>
 
-        {r.split&&<Card title="Антресоль">
-          <In l="Кол-во дверей антресоли" v={antresolDoors} set={sAntresolDoors} mn={1} mx={6}/>
+        {r.splitV&&<Card title="Антресоль">
           <In l="Полки в антресоли" v={antresolShelves} set={sAntresolShelves} mn={0} mx={6}/>
-          <div style={{padding:"8px 12px",background:C.inputBg,borderRadius:8,fontSize:12,color:C.textDim}}>
-            {r.modules[1]&&<>Фасад антр.: {r.modules[1].dim.fH}×{r.modules[1].dim.fW} мм • Петель: {r.modules[1].dim.hpp}</>}
-          </div>
         </Card>}
         <Card title="Материал">
           <Sel l="ЛДСП 16мм (Экспоторг)" v={ldsp} set={v=>sL(Number(v))}
@@ -673,6 +710,7 @@ function App(){
             opts={[{v:2,l:"2 мм"},{v:3,l:"3 мм"}]}/>
           <div style={{padding:"8px 12px",background:C.inputBg,borderRadius:8,fontSize:12,color:C.textDim}}>
             Фасад: {r.dim.fH}×{r.dim.fW} мм • Зазор: {r.dim.fG}мм • Петель: {r.dim.hpp}
+            {r.cols>1&&<div style={{marginTop:4,color:C.accent}}>Модулей по ширине: {r.cols} (по {r.colDoors.join("+")} дв.)</div>}
           </div>
         </Card>
         <Card title="Наполнение">
@@ -725,15 +763,11 @@ function App(){
 
       {tab==="cost"&&<>
         {r.split&&<Card>
-          <div style={{fontSize:13,fontWeight:600,color:C.accent,marginBottom:10,textTransform:"uppercase",letterSpacing:1}}>Разбивка по модулям</div>
-          <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:`1px solid ${C.border}`}}>
-            <span style={{fontSize:13}}>Нижний модуль ({r.lowerH}мм)</span>
-            <span style={{fontSize:14,fontFamily:"'JetBrains Mono',monospace",color:C.accent}}>{r.modules[0].costs.t.toLocaleString("ru")} ₽</span>
-          </div>
-          <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:`1px solid ${C.border}`}}>
-            <span style={{fontSize:13}}>Антресоль ({r.antresolH}мм)</span>
-            <span style={{fontSize:14,fontFamily:"'JetBrains Mono',monospace",color:C.accentDim}}>{r.modules[1].costs.t.toLocaleString("ru")} ₽</span>
-          </div>
+          <div style={{fontSize:13,fontWeight:600,color:C.accent,marginBottom:10,textTransform:"uppercase",letterSpacing:1}}>Модули ({r.cols}×{r.rows})</div>
+          {r.modules.map((m,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid "+C.border}}>
+            <span style={{fontSize:12,color:C.text}}>{m.label||("Модуль "+(i+1))}</span>
+            <span style={{fontSize:13,fontFamily:"'JetBrains Mono',monospace",color:C.accent}}>{m.costs.t.toLocaleString("ru")} ₽</span>
+          </div>)}
         </Card>}
         <Card>
           <div style={{fontSize:13,fontWeight:600,color:C.accent,marginBottom:16,textTransform:"uppercase",letterSpacing:1}}>Себестоимость</div>
