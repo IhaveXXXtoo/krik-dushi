@@ -137,7 +137,153 @@ function Tog({l,v,set}){
   </div>;
 }
 
-function App(){
+function CuttingMap({details}){
+  const SHEET_W=2770,SHEET_H=2040,GAP=4;
+  const colors=["#C49448","#5B9BD5","#4CAF50","#CF6679","#9C27B0","#FF9800","#00BCD4","#8BC34A","#E91E63","#607D8B","#CDDC39","#795548"];
+  // Expand details into individual parts
+  const parts=[];
+  details.forEach((d,di)=>{
+    if(d.dvp)return; // skip DVP
+    for(let i=0;i<d.q;i++){
+      const h=Math.max(d.h,d.w), w=Math.min(d.h,d.w);
+      parts.push({n:d.n+(d.q>1?` #${i+1}`:""),h,w,origH:d.h,origW:d.w,ci:di,
+        e1:d.e1||[],e04:d.e04||[],isB:d.isB});
+    }
+  });
+  // Sort by height desc then width desc
+  parts.sort((a,b)=>b.h-a.h||b.w-a.w);
+  // Simple shelf-based bin packing
+  const sheets=[];
+  const placed=new Array(parts.length).fill(false);
+  let remaining=parts.length;
+  while(remaining>0){
+    const sheet={w:SHEET_W,h:SHEET_H,parts:[],shelves:[{y:0,h:0,x:0}]};
+    for(let pi=0;pi<parts.length;pi++){
+      if(placed[pi])continue;
+      const p=parts[pi];
+      let fit=false;
+      // Try each shelf
+      for(let si=0;si<sheet.shelves.length;si++){
+        const s=sheet.shelves[si];
+        // Try normal orientation
+        if(s.x+p.w<=SHEET_W && s.y+Math.max(s.h,p.h)<=SHEET_H){
+          // Check if fits in current shelf height or extends it
+          if(s.h===0||p.h<=s.h){
+            sheet.parts.push({...p,x:s.x,y:s.y,pw:p.w,ph:p.h});
+            s.x+=p.w+GAP;
+            if(p.h>s.h)s.h=p.h;
+            placed[pi]=true;remaining--;fit=true;break;
+          }
+        }
+        // Try rotated
+        if(!fit && s.x+p.h<=SHEET_W && s.y+Math.max(s.h,p.w)<=SHEET_H){
+          if(s.h===0||p.w<=s.h){
+            sheet.parts.push({...p,x:s.x,y:s.y,pw:p.h,ph:p.w,rotated:true});
+            s.x+=p.h+GAP;
+            if(p.w>s.h)s.h=p.w;
+            placed[pi]=true;remaining--;fit=true;break;
+          }
+        }
+      }
+      if(!fit){
+        // New shelf
+        const lastS=sheet.shelves[sheet.shelves.length-1];
+        const newY=lastS.y+lastS.h+GAP;
+        if(newY+p.h<=SHEET_H && p.w<=SHEET_W){
+          sheet.shelves.push({y:newY,h:p.h,x:p.w+GAP});
+          sheet.parts.push({...p,x:0,y:newY,pw:p.w,ph:p.h});
+          placed[pi]=true;remaining--;
+        } else if(newY+p.w<=SHEET_H && p.h<=SHEET_W){
+          sheet.shelves.push({y:newY,h:p.w,x:p.h+GAP});
+          sheet.parts.push({...p,x:0,y:newY,pw:p.h,ph:p.w,rotated:true});
+          placed[pi]=true;remaining--;
+        }
+      }
+    }
+    sheets.push(sheet);
+    if(sheets.length>10)break; // safety
+  }
+
+  // Calculate real cut length and edge from placed parts
+  let totalCutM=0,totalE04=0,totalE1=0;
+  sheets.forEach(sh=>{
+    sh.parts.forEach(p=>{
+      totalCutM+=(p.pw+p.ph); // each part = 2 cuts
+      if(!p.isB){
+        totalE1+=(p.e1||[]).reduce((a,b)=>a+b,0)/1000;
+        totalE04+=(p.e04||[]).reduce((a,b)=>a+b,0)/1000;
+      }
+    });
+  });
+
+  const scale=0.14; // px per mm for mobile display
+  const svgW=Math.ceil(SHEET_W*scale)+2;
+  const svgH=Math.ceil(SHEET_H*scale)+2;
+
+  return <>
+    <div style={{fontSize:12,color:C.textDim,marginBottom:8}}>
+      Карта раскроя • Лист 2770×2040 мм (после торцовки) • {sheets.length} лист(ов)
+    </div>
+    <div style={{background:C.card,borderRadius:10,padding:12,marginBottom:12,border:`1px solid ${C.border}`,fontSize:13}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+        <span style={{color:C.textDim}}>Распил (по раскрою)</span>
+        <span style={{fontFamily:"'JetBrains Mono',monospace",color:C.accent}}>{(totalCutM/1000).toFixed(1)} п.м.</span>
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+        <span style={{color:C.textDim}}>Кромка 1мм</span>
+        <span style={{fontFamily:"'JetBrains Mono',monospace",color:C.accent}}>{totalE1.toFixed(1)} п.м.</span>
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between"}}>
+        <span style={{color:C.textDim}}>Кромка 0.4мм</span>
+        <span style={{fontFamily:"'JetBrains Mono',monospace",color:C.accent}}>{totalE04.toFixed(1)} п.м.</span>
+      </div>
+    </div>
+    {sheets.map((sh,si)=>{
+      const usedArea=sh.parts.reduce((s,p)=>s+p.pw*p.ph,0);
+      const pct=Math.round(usedArea/(SHEET_W*SHEET_H)*100);
+      return <div key={si} style={{marginBottom:16}}>
+        <div style={{fontSize:13,fontWeight:500,marginBottom:6,display:"flex",justifyContent:"space-between"}}>
+          <span>Лист {si+1}</span>
+          <span style={{color:pct>=70?C.green:pct>=50?C.accent:C.red,fontFamily:"'JetBrains Mono',monospace"}}>{pct}% заполнение</span>
+        </div>
+        <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+          <svg width={svgW} height={svgH} style={{background:"#111",borderRadius:8,border:`1px solid ${C.border}`}}>
+            <rect x={1} y={1} width={SHEET_W*scale} height={SHEET_H*scale} fill="none" stroke="#333" strokeWidth={1} strokeDasharray="4,2"/>
+            {sh.parts.map((p,pi)=>{
+              const x=p.x*scale+1,y=p.y*scale+1,w=p.pw*scale,h=p.ph*scale;
+              const col=colors[p.ci%colors.length];
+              const showLabel=w>30&&h>14;
+              const showDims=w>50&&h>24;
+              return <g key={pi}>
+                <rect x={x} y={y} width={w} height={h} fill={col+"22"} stroke={col} strokeWidth={1} rx={1}/>
+                {showLabel&&<text x={x+w/2} y={y+(showDims?h/2-4:h/2+1)} textAnchor="middle" dominantBaseline="middle" fill={C.text} fontSize={w>80?8:6} fontFamily="'JetBrains Mono',monospace">
+                  {p.n.length>12?p.n.slice(0,10)+"..":p.n}
+                </text>}
+                {showDims&&<text x={x+w/2} y={y+h/2+7} textAnchor="middle" dominantBaseline="middle" fill={C.textDim} fontSize={6} fontFamily="'JetBrains Mono',monospace">
+                  {p.origH}×{p.origW}{p.rotated?" ↻":""}
+                </text>}
+                {/* Edge indicators */}
+                {p.e1&&p.e1.length>0&&!p.isB&&<line x1={x} y1={y} x2={x+w} y2={y} stroke={C.accent} strokeWidth={2} opacity={0.8}/>}
+              </g>;
+            })}
+          </svg>
+        </div>
+        <div style={{fontSize:11,color:C.textDim,marginTop:4}}>
+          {sh.parts.length} дет. • Отход: {100-pct}%
+        </div>
+      </div>;
+    })}
+    <div style={{background:C.card,borderRadius:10,padding:12,border:`1px solid ${C.border}`,fontSize:11,color:C.textDim}}>
+      <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+        <span><span style={{display:"inline-block",width:12,height:3,background:C.accent,marginRight:4,verticalAlign:"middle"}}></span> кромка 1мм</span>
+        <span><span style={{display:"inline-block",width:8,height:8,background:"#C4944822",border:`1px solid ${C.accent}`,marginRight:4,verticalAlign:"middle"}}></span> деталь</span>
+        <span>↻ повёрнута</span>
+      </div>
+    </div>
+  </>;
+}
+
+
   const[tab,sTab]=useState("params");
   const[cH,sCH]=useState(2500);
   const[nW,sNW]=useState(1800);
@@ -155,7 +301,7 @@ function App(){
   const r=useMemo(()=>calc({cH,nW,d,niche,bt,doors,nS,nD,rod,fg:Number(fg),ldsp}),[cH,nW,d,niche,bt,doors,nS,nD,rod,fg,ldsp]);
   const retail=Math.ceil(r.costs.t*mk);
 
-  const tabs=[{id:"params",l:"Параметры"},{id:"details",l:"Детали"},{id:"hardware",l:"Фурнитура"},{id:"cost",l:"Стоимость"}];
+  const tabs=[{id:"params",l:"Параметры"},{id:"details",l:"Детали"},{id:"cutting",l:"Раскрой"},{id:"hardware",l:"Фурнитура"},{id:"cost",l:"Стоимость"}];
 
   const Card=({title,children})=><div style={{background:C.card,borderRadius:12,padding:16,marginBottom:12,border:`1px solid ${C.border}`}}>
     {title&&<div style={{fontSize:13,fontWeight:600,color:C.accent,marginBottom:12,textTransform:"uppercase",letterSpacing:1}}>{title}</div>}
@@ -232,6 +378,8 @@ function App(){
           0.4мм: ~{r.e04} п.м. • 1мм: ~{r.e1} п.м. • Распил: ~{r.cutM} п.м.
         </div>
       </>}
+
+      {tab==="cutting"&&<CuttingMap details={r.det}/>}
 
       {tab==="hardware"&&<>
         <div style={{fontSize:12,color:C.textDim,marginBottom:8}}>Фурнитура (опт Экспоторг)</div>
