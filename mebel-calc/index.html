@@ -45,66 +45,158 @@ const SA=5.796;
 const PR={c16:60,e04:69,e1:76.5,d5:13,d7:19,d35:58,qtr:58};
 const HW={conf:1.5,pk:.71,s4x16:.51,hng:137.5,r400:737,r450:759,r500:825,sh:250,shh:35};
 
-function calc(p){
+// Расчёт одного модуля (корпуса)
+// moduleType: "single" | "lower" | "antresol"
+function calcModule(p, moduleType, moduleH, moduleW, lowerH){
   const det=[],hw=[];
-  let cuts=0,e04t=0,e1t=0,dr5=0,dr7=0,dr35=0,qtr=0,srz=0;
-  const cH=p.cH-8, cW=p.niche?p.nW-5:p.nW, bT=p.bt==="8"?8:16, iD=p.d-bT, iW=cW-32;
-  det.push({n:"Боковина",q:2,h:cH,w:p.d,e1:[cH],e04:[cH,p.d,p.d]});
-  det.push({n:"Дно",q:1,h:iW,w:p.d,e1:[iW],e04:[p.d,p.d]});
-  det.push({n:"Крыша",q:1,h:iW,w:p.d,e1:[iW],e04:[p.d,p.d]});
-  det.push({n:"Проставка опор",q:2,h:40,w:p.d-30,e1:[40],e04:[p.d-30]});
-  det.push({n:"Цоколь планка",q:1,h:iW,w:44,e1:[iW,44,44],e04:[]});
-  const bW=p.bt==="8"?cW-20:iW, bH=p.bt==="8"?cH-20:cH-76;
-  det.push({n:`ЗС ${p.bt}мм ЛДСП`,q:1,h:bH,w:bW,e1:[],e04:[],isB:true,bt:p.bt});
-  if(p.bt==="8"){const pm=2*(bH+bW)/1000;qtr+=pm;srz+=Math.ceil(pm*5)+4;}
-  const sW=iW,sD=iD-2;
-  if(p.nS>0){det.push({n:"Полка",q:p.nS,h:sW,w:sD,e1:[sW],e04:[]});hw.push({n:"Полкодержатель",q:p.nS*4,p:HW.pk});dr5+=p.nS*4;}
-  if(p.rod){hw.push({n:`Штанга ${sW}мм`,q:1,p:Math.ceil(sW/1000*HW.sh)});hw.push({n:"Штангодержатель",q:2,p:HW.shh});}
-  if(p.nD>0){
-    const dIW=sW-42,dH=150,dDI=sD-50;
-    det.push({n:"Проставка напр.",q:2,h:p.nD*(dH+30),w:16,e1:[],e04:[p.nD*(dH+30)]});
-    det.push({n:"Бок. ящика",q:p.nD*2,h:dDI,w:dH,e1:[dDI],e04:[dH,dH,dDI]});
-    det.push({n:"Перед/зад ящ.",q:p.nD*2,h:dIW-32,w:dH,e1:[],e04:[dIW-32,dH,dH]});
-    det.push({n:"Дно ящ. ДВП",q:p.nD,h:dIW-4,w:dDI-4,e1:[],e04:[],dvp:true});
-    let rp=HW.r500;if(p.d<=450)rp=HW.r400;else if(p.d<=500)rp=HW.r450;
-    hw.push({n:`Направл. ${p.d<=450?400:p.d<=500?450:500}мм`,q:p.nD,p:rp});
+  let dr5=0,dr7=0,dr35=0,qtr=0,srz=0;
+  const bT=p.bt==="8"?8:16, iD=p.d-bT, iW=moduleW-32;
+  const isLower=moduleType==="lower";
+  const isAntresol=moduleType==="antresol";
+
+  // Боковины
+  det.push({n:(isAntresol?"[А] ":"")+"Боковина",q:2,h:moduleH,w:p.d,e1:[moduleH],e04:[moduleH,p.d,p.d]});
+  // Дно
+  det.push({n:(isAntresol?"[А] ":"")+"Дно",q:1,h:iW,w:p.d,e1:[iW],e04:[p.d,p.d]});
+  // Крыша
+  det.push({n:(isAntresol?"[А] ":"")+"Крыша",q:1,h:iW,w:p.d,e1:[iW],e04:[p.d,p.d]});
+
+  // Проставки и цоколь — только у нижнего модуля или single
+  if(!isAntresol){
+    det.push({n:"Проставка опор",q:2,h:40,w:p.d-30,e1:[40],e04:[p.d-30]});
+    det.push({n:"Цоколь планка",q:1,h:iW,w:44,e1:[iW,44,44],e04:[]});
   }
-  const fH=cH-76;
-  let fG=p.fg,fW=Math.floor((cW-(p.doors-1)*fG)/p.doors);
-  const rm=cW-(fW*p.doors+(p.doors-1)*fG);
-  if(rm!==0&&p.doors>1){const ag=fG===3?2:3;const aw=Math.floor((cW-(p.doors-1)*ag)/p.doors);const ar=cW-(aw*p.doors+(p.doors-1)*ag);if(Math.abs(ar)<Math.abs(rm)){fG=ag;fW=aw;}}
-  det.push({n:"Фасад",q:p.doors,h:fH,w:fW,e1:[fH,fH,fW,fW],e04:[],fc:true});
+
+  // Задняя стенка — секциями макс 1000мм ширины
+  const bsMaxW=1000;
+  const backFullW=p.bt==="8"?moduleW-20:iW;
+  const backFullH=p.bt==="8"?moduleH-20:moduleH-(isAntresol?32:76);
+  const numBackSections=Math.ceil(backFullW/bsMaxW);
+  for(let si=0;si<numBackSections;si++){
+    const secW=si<numBackSections-1?bsMaxW:(backFullW-(numBackSections-1)*bsMaxW);
+    det.push({n:(isAntresol?"[А] ":"")+"ЗС "+p.bt+"мм сек."+(si+1),q:1,h:backFullH,w:secW,e1:[],e04:[],isB:true,bt:p.bt});
+    if(p.bt==="8"){const pm=2*(backFullH+secW)/1000;qtr+=pm;srz+=Math.ceil(pm*5)+4;}
+  }
+
+  const sW=iW,sD=iD-2;
+
+  // Наполнение нижнего / single
+  if(!isAntresol){
+    if(p.nS>0){det.push({n:"Полка",q:p.nS,h:sW,w:sD,e1:[sW],e04:[]});hw.push({n:"Полкодержатель",q:p.nS*4,p:HW.pk});dr5+=p.nS*4;}
+    if(p.rod){
+      hw.push({n:"Штанга "+sW+"мм",q:1,p:Math.ceil(sW/1000*HW.sh)});
+      hw.push({n:"Штангодержатель",q:2,p:HW.shh});
+      // Полка над штангой
+      if(p.shelfAboveRod){
+        det.push({n:"Полка над штангой",q:1,h:sW,w:sD,e1:[sW],e04:[]});
+        hw.push({n:"Полкодержатель (над штангой)",q:4,p:HW.pk});dr5+=4;
+      }
+    }
+    if(p.nD>0){
+      const dIW=sW-42,dH=150,dDI=sD-50;
+      det.push({n:"Проставка напр.",q:2,h:p.nD*(dH+30),w:16,e1:[],e04:[p.nD*(dH+30)]});
+      det.push({n:"Бок. ящика",q:p.nD*2,h:dDI,w:dH,e1:[dDI],e04:[dH,dH,dDI]});
+      det.push({n:"Перед/зад ящ.",q:p.nD*2,h:dIW-32,w:dH,e1:[],e04:[dIW-32,dH,dH]});
+      det.push({n:"Дно ящ. ДВП",q:p.nD,h:dIW-4,w:dDI-4,e1:[],e04:[],dvp:true});
+      let rp=HW.r500;if(p.d<=450)rp=HW.r400;else if(p.d<=500)rp=HW.r450;
+      hw.push({n:"Направл. "+(p.d<=450?400:p.d<=500?450:500)+"мм",q:p.nD,p:rp});
+    }
+  } else {
+    // Антресоль — полки по количеству antresolShelves
+    const aShelves=p.antresolShelves||0;
+    if(aShelves>0){
+      det.push({n:"[А] Полка",q:aShelves,h:sW,w:sD,e1:[sW],e04:[]});
+      hw.push({n:"[А] Полкодержатель",q:aShelves*4,p:HW.pk});dr5+=aShelves*4;
+    }
+  }
+
+  // Фасады
+  const innerFacadeH=moduleH-(isAntresol?32:76);
+  const doors=isAntresol?p.antresolDoors:p.doors;
+  let fG=p.fg,fW=Math.floor((moduleW-(doors-1)*fG)/doors);
+  const rm=moduleW-(fW*doors+(doors-1)*fG);
+  if(rm!==0&&doors>1){const ag=fG===3?2:3;const aw=Math.floor((moduleW-(doors-1)*ag)/doors);const ar=moduleW-(aw*doors+(doors-1)*ag);if(Math.abs(ar)<Math.abs(rm)){fG=ag;fW=aw;}}
+  const fH=innerFacadeH;
+  det.push({n:(isAntresol?"[А] ":"")+"Фасад",q:doors,h:fH,w:fW,e1:[fH,fH,fW,fW],e04:[],fc:true});
   let hpp=2;if(fH>850)hpp=3;if(fH>1300)hpp=4;if(fH>1700)hpp=5;if(fH>2200)hpp=6;
-  const tH=p.doors*hpp;
-  hw.push({n:"Петля Clip-on",q:tH,p:HW.hng});dr35+=tH;
-  const ppj=p.d<=600?2:3;hw.push({n:"Конфирмат",q:4*ppj,p:HW.conf});dr7+=4*ppj*2;
+  const tH=doors*hpp;
+  hw.push({n:(isAntresol?"[А] ":"")+"Петля Clip-on",q:tH,p:HW.hng});dr35+=tH;
+
+  // Крепёж корпуса
+  const ppj=p.d<=600?2:3;
+  const joints=4; // дно-бок×2 + крыша-бок×2
+  hw.push({n:(isAntresol?"[А] ":"")+"Конфирмат",q:joints*ppj,p:HW.conf});dr7+=joints*ppj*2;
+
+  // Кромка
   let t04=0,t1=0;
   det.forEach(d=>{if(d.isB||d.dvp)return;t04+=(d.e04||[]).reduce((a,b)=>a+b,0)*d.q;t1+=(d.e1||[]).reduce((a,b)=>a+b,0)*d.q;});
   const em04=Math.ceil(t04/1000*1.1),em1=Math.ceil(t1/1000*1.1);
-  // Распил: каждая деталь = 2 реза (по длине + по ширине), считаем максимальный из двух размеров
+
+  // Распил
   let tCut=0;det.forEach(d=>{if(d.dvp)return;tCut+=(Math.max(d.h,d.w)+Math.min(d.h,d.w))*d.q;});
   const cutM=Math.ceil(tCut/1000);
-  // Присадка: торцевые под шканты (по 2 на каждый конфирмат), под полкодержатели в боковинах
-  const drTorz=dr7; // торцевое под каждый конфирмат
-  dr5+=p.nS*4; // отверстия в боковинах под полкодержатели (в пласть)
-  // Листы: 75% полезного использования листа
+  const drTorz=dr7;
+  if(!isAntresol) dr5+=p.nS*4;
+
+  // Листы
   let lA=0;det.forEach(d=>{if(d.isB||d.dvp)return;lA+=(d.h*d.w*d.q)/1e6;});
   const sheets=Math.ceil(lA/(SA*0.75)),lC=sheets*LDSP[p.ldsp].ps;
-  // ЗС: 8мм = ЛДСП 3535₽/лист, 16мм = тот же декор
-  const bA=(bH*bW)/1e6,bC=p.bt==="8"?Math.ceil(bA/(SA*0.75)*3535):Math.ceil(bA/(SA*0.75)*LDSP[p.ldsp].ps);
-  // Дно ящиков ДВП 3мм = ХДФ 865₽/лист
+
+  // ЗС стоимость — суммируем все секции
+  let bA=0;det.forEach(d=>{if(d.isB)bA+=(d.h*d.w*d.q)/1e6;});
+  const bC=p.bt==="8"?Math.ceil(bA/(SA*0.75)*3535):Math.ceil(bA/(SA*0.75)*LDSP[p.ldsp].ps);
+
+  // ДВП
   let dvA=0;det.forEach(d=>{if(d.dvp)dvA+=(d.h*d.w*d.q)/1e6;});
   const dvC=dvA>0?Math.ceil(Math.max(1,dvA/(SA*0.75))*865):0;
+
   // Обработка
   const prC=Math.ceil(cutM*PR.c16+em04*PR.e04+em1*PR.e1+dr5*PR.d5+dr7*PR.d7+drTorz*PR.d7+dr35*PR.d35+qtr*PR.qtr);
-  // Кромка материал
   const edC=Math.ceil(em04*18+em1*44);
-  // Фурнитура
   const hwC=Math.ceil(hw.reduce((s,h)=>s+h.q*h.p,0)+srz*HW.s4x16);
-  // Упаковка: картон 120₽/м², ~2м² на модуль
   const packC=Math.ceil(2*120);
   const tot=lC+bC+dvC+prC+edC+hwC+packC;
-  return{det,hw,e04:em04,e1:em1,cutM,drTorz,costs:{l:lC,b:bC,dv:dvC,pr:prC,ed:edC,hw:hwC,pack:packC,t:tot},sheets,dim:{cH,cW,iW,fH,fW,fG,hpp}};
+
+  return{det,hw,e04:em04,e1:em1,cutM,drTorz,costs:{l:lC,b:bC,dv:dvC,pr:prC,ed:edC,hw:hwC,pack:packC,t:tot},sheets,dim:{cH:moduleH,cW:moduleW,iW,fH,fW,fG,hpp},moduleType};
+}
+
+// Главная функция: решает — один модуль или два
+function calc(p){
+  const totalH=p.cH-8; // высота корпуса с зазором до потолка
+  const cW=p.niche?p.nW-5:p.nW;
+  const LOWER_H=2100; // фиксированная высота нижнего модуля
+
+  // Если помещается в один модуль
+  if(totalH<=2770){
+    const r=calcModule(p,"single",totalH,cW,0);
+    return{modules:[r],split:false,totalH,cW,
+      costs:{l:r.costs.l,b:r.costs.b,dv:r.costs.dv,pr:r.costs.pr,ed:r.costs.ed,hw:r.costs.hw,pack:r.costs.pack,t:r.costs.t},
+      det:r.det,hw:r.hw,e04:r.e04,e1:r.e1,cutM:r.cutM,drTorz:r.drTorz,sheets:r.sheets,
+      dim:r.dim};
+  }
+
+  // Разбивка: нижний 2100 + антресоль (остаток)
+  const antresolH=totalH-LOWER_H;
+  const lower=calcModule(p,"lower",LOWER_H,cW,0);
+  const upper=calcModule(p,"antresol",antresolH,cW,LOWER_H);
+
+  // Суммируем
+  const det=[...lower.det,...upper.det];
+  const hw=[...lower.hw,...upper.hw];
+  const costs={
+    l:lower.costs.l+upper.costs.l, b:lower.costs.b+upper.costs.b,
+    dv:lower.costs.dv+upper.costs.dv, pr:lower.costs.pr+upper.costs.pr,
+    ed:lower.costs.ed+upper.costs.ed, hw:lower.costs.hw+upper.costs.hw,
+    pack:lower.costs.pack+upper.costs.pack,
+    t:lower.costs.t+upper.costs.t
+  };
+
+  return{modules:[lower,upper],split:true,totalH,cW,lowerH:LOWER_H,antresolH,
+    costs,det,hw,
+    e04:lower.e04+upper.e04, e1:lower.e1+upper.e1,
+    cutM:lower.cutM+upper.cutM, drTorz:lower.drTorz+upper.drTorz,
+    sheets:lower.sheets+upper.sheets,
+    dim:lower.dim};
 }
 
 function In({l,v,set,u="мм",mn=0,mx=9999,st=1}){
@@ -301,11 +393,14 @@ function App(){
   const[nS,sNS]=useState(5);
   const[nD,sND]=useState(2);
   const[rod,sRod]=useState(true);
+  const[shelfAboveRod,sShelfAboveRod]=useState(true);
+  const[antresolShelves,sAntresolShelves]=useState(1);
+  const[antresolDoors,sAntresolDoors]=useState(2);
   const[fg,sFg]=useState(3);
   const[ldsp,sL]=useState(0);
   const[mk,sMk]=useState(2.5);
 
-  const r=useMemo(()=>calc({cH,nW,d,niche,bt,doors,nS,nD,rod,fg:Number(fg),ldsp}),[cH,nW,d,niche,bt,doors,nS,nD,rod,fg,ldsp]);
+  const r=useMemo(()=>calc({cH,nW,d,niche,bt,doors,nS,nD,rod,shelfAboveRod,antresolShelves,antresolDoors,fg:Number(fg),ldsp}),[cH,nW,d,niche,bt,doors,nS,nD,rod,shelfAboveRod,antresolShelves,antresolDoors,fg,ldsp]);
   const retail=Math.ceil(r.costs.t*mk);
 
   const tabs=[{id:"params",l:"Параметры"},{id:"details",l:"Детали"},{id:"cutting",l:"Раскрой"},{id:"hardware",l:"Фурнитура"},{id:"cost",l:"Стоимость"}];
@@ -319,7 +414,7 @@ function App(){
     <div style={{padding:"16px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
       <div>
         <h1 style={{margin:0,fontFamily:"'Bebas Neue',sans-serif",fontSize:24,color:C.accent,letterSpacing:2}}>МЕБЕЛЬ.КАЛК</h1>
-        <span style={{fontSize:10,color:C.textDim,letterSpacing:1}}>TECH7GROUP • v2</span>
+        <span style={{fontSize:10,color:C.textDim,letterSpacing:1}}>TECH7GROUP • v3{r.split?" • 2 модуля":""}</span>
       </div>
       <div style={{textAlign:"right"}}>
         <div style={{fontSize:10,color:C.textDim}}>себес</div>
@@ -342,10 +437,25 @@ function App(){
           <In l="Глубина" v={d} set={sD}/>
           <Tog l="Встройка в нишу" v={niche} set={sNi}/>
           <div style={{marginTop:8,padding:"8px 12px",background:C.inputBg,borderRadius:8,fontSize:12,color:C.textDim}}>
-            Корпус: {r.dim.cH}×{r.dim.cW}×{d} мм
-            {r.dim.cH>2770&&<div style={{color:C.red,marginTop:4}}>⚠ {r.dim.cH}мм &gt; 2770 — бить на модули!</div>}
+            {r.split?<>
+              <div style={{color:C.accent,fontWeight:500,marginBottom:4}}>Разбивка на 2 модуля</div>
+              <div>Нижний: {r.lowerH}×{r.cW}×{d} мм</div>
+              <div>Антресоль: {r.antresolH}×{r.cW}×{d} мм</div>
+              <div style={{marginTop:4,color:C.textDim}}>Общая высота: {r.totalH}мм (потолок {cH} − 8)</div>
+            </>:<>
+              Корпус: {r.dim.cH}×{r.dim.cW}×{d} мм
+              {r.dim.cH>2770&&<div style={{color:C.red,marginTop:4}}>⚠ {r.dim.cH}мм &gt; 2770 — бить на модули!</div>}
+            </>}
           </div>
         </Card>
+
+        {r.split&&<Card title="Антресоль">
+          <In l="Кол-во дверей антресоли" v={antresolDoors} set={sAntresolDoors} mn={1} mx={6}/>
+          <In l="Полки в антресоли" v={antresolShelves} set={sAntresolShelves} mn={0} mx={6}/>
+          <div style={{padding:"8px 12px",background:C.inputBg,borderRadius:8,fontSize:12,color:C.textDim}}>
+            {r.modules[1]&&<>Фасад антр.: {r.modules[1].dim.fH}×{r.modules[1].dim.fW} мм • Петель: {r.modules[1].dim.hpp}</>}
+          </div>
+        </Card>}
         <Card title="Материал">
           <Sel l="ЛДСП 16мм (Экспоторг)" v={ldsp} set={v=>sL(Number(v))}
             opts={LDSP.map((c,i)=>({v:i,l:`${c.name} — ${c.ps.toLocaleString("ru")}₽`}))}/>
@@ -364,12 +474,16 @@ function App(){
           <In l="Полки (съёмные)" v={nS} set={sNS} mn={0} mx={12}/>
           <In l="Ящики" v={nD} set={sND} mn={0} mx={6}/>
           <Tog l="Штанга для одежды" v={rod} set={sRod}/>
+          {rod&&<Tog l="Полка над штангой" v={shelfAboveRod} set={sShelfAboveRod}/>}
         </Card>
       </>}
 
       {tab==="details"&&<>
-        <div style={{fontSize:12,color:C.textDim,marginBottom:8}}>Деталировка • ЛДСП 16мм • Листов: {r.sheets}</div>
-        {r.det.map((d,i)=><div key={i} style={{background:C.card,borderRadius:10,padding:"10px 14px",marginBottom:5,border:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div style={{fontSize:12,color:C.textDim,marginBottom:8}}>
+          Деталировка • ЛДСП 16мм • Листов: {r.sheets}
+          {r.split&&<span style={{color:C.accent}}> • 2 модуля</span>}
+        </div>
+        {r.det.map((d,i)=><div key={i} style={{background:C.card,borderRadius:10,padding:"10px 14px",marginBottom:5,border:`1px solid ${d.n.startsWith("[А]")?C.accentDim+"55":C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div>
             <div style={{fontSize:14,fontWeight:500}}>{d.n}</div>
             <div style={{fontSize:12,color:C.textDim,fontFamily:"'JetBrains Mono',monospace",marginTop:2}}>
@@ -378,7 +492,7 @@ function App(){
               {d.e04&&d.e04.length>0&&<span> • 0.4:{d.e04.length}ст</span>}
             </div>
           </div>
-          <div style={{background:C.accent,color:C.bg,borderRadius:6,padding:"4px 10px",fontSize:14,fontWeight:600,fontFamily:"'JetBrains Mono',monospace"}}>×{d.q}</div>
+          <div style={{background:d.n.startsWith("[А]")?C.accentDim:C.accent,color:d.n.startsWith("[А]")?C.white:C.bg,borderRadius:6,padding:"4px 10px",fontSize:14,fontWeight:600,fontFamily:"'JetBrains Mono',monospace"}}>×{d.q}</div>
         </div>)}
         <div style={{marginTop:12,padding:"10px 14px",background:C.card,borderRadius:10,border:`1px solid ${C.border}`,fontSize:13}}>
           <div style={{color:C.textDim,marginBottom:4}}>Кромка / Распил</div>
@@ -403,6 +517,17 @@ function App(){
       </>}
 
       {tab==="cost"&&<>
+        {r.split&&<Card>
+          <div style={{fontSize:13,fontWeight:600,color:C.accent,marginBottom:10,textTransform:"uppercase",letterSpacing:1}}>Разбивка по модулям</div>
+          <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:`1px solid ${C.border}`}}>
+            <span style={{fontSize:13}}>Нижний модуль ({r.lowerH}мм)</span>
+            <span style={{fontSize:14,fontFamily:"'JetBrains Mono',monospace",color:C.accent}}>{r.modules[0].costs.t.toLocaleString("ru")} ₽</span>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:`1px solid ${C.border}`}}>
+            <span style={{fontSize:13}}>Антресоль ({r.antresolH}мм)</span>
+            <span style={{fontSize:14,fontFamily:"'JetBrains Mono',monospace",color:C.accentDim}}>{r.modules[1].costs.t.toLocaleString("ru")} ₽</span>
+          </div>
+        </Card>}
         <Card>
           <div style={{fontSize:13,fontWeight:600,color:C.accent,marginBottom:16,textTransform:"uppercase",letterSpacing:1}}>Себестоимость</div>
           {[
