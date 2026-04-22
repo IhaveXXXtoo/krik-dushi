@@ -382,6 +382,211 @@ function CuttingMap({details}){
   </>;
 }
 
+function SketchView({r, params}){
+  const[mode,setMode]=useState("closed"); // closed = с фасадами, open = без фасадов
+  const PAD=40, DIM_OFF=28, FONT="'JetBrains Mono',monospace";
+  const modules=r.split?r.modules:[{...r,moduleType:"single"}];
+
+  // Суммарная высота для SVG
+  const totalH=r.split?(r.lowerH+r.antresolH):r.dim.cH;
+  const totalW=r.cW||r.dim.cW;
+
+  // Масштаб: вписываем в ~360px ширины
+  const maxSvgW=360;
+  const sc=Math.min((maxSvgW-PAD*2)/totalW, (500-PAD*2)/totalH, 0.18);
+  const svgW=Math.ceil(totalW*sc)+PAD*2+DIM_OFF;
+  const svgH=Math.ceil(totalH*sc)+PAD*2+DIM_OFF+20;
+
+  // Рисуем размерную линию
+  function DimLine({x1,y1,x2,y2,label,side}){
+    const mx=(x1+x2)/2, my=(y1+y2)/2;
+    const isVert=x1===x2;
+    const tx=isVert?(side==="left"?x1-14:x1+14):mx;
+    const ty=isVert?my:(side==="top"?y1-8:y1+12);
+    return <g>
+      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={C.textDim} strokeWidth={0.7} strokeDasharray="3,2"/>
+      {/* Засечки */}
+      {isVert?<>
+        <line x1={x1-3} y1={y1} x2={x1+3} y2={y1} stroke={C.textDim} strokeWidth={0.7}/>
+        <line x1={x1-3} y1={y2} x2={x1+3} y2={y2} stroke={C.textDim} strokeWidth={0.7}/>
+      </>:<>
+        <line x1={x1} y1={y1-3} x2={x1} y2={y1+3} stroke={C.textDim} strokeWidth={0.7}/>
+        <line x1={x2} y1={y1-3} x2={x2} y2={y1+3} stroke={C.textDim} strokeWidth={0.7}/>
+      </>}
+      <text x={tx} y={ty} textAnchor="middle" dominantBaseline="middle" fill={C.accent} fontSize={8} fontFamily={FONT}
+        transform={isVert?`rotate(-90,${tx},${ty})`:undefined}>{label}</text>
+    </g>;
+  }
+
+  function drawModule(mod, offsetY, modH, modW, isAntresol){
+    const ox=PAD+DIM_OFF, oy=PAD+offsetY*sc;
+    const w=modW*sc, h=modH*sc;
+    const elems=[];
+    const iW=(modW-32)*sc, iH=h;
+    const sideW=16*sc;
+
+    // Корпус — боковины, дно, крыша
+    // Левая боковина
+    elems.push(<rect key="lb" x={ox} y={oy} width={sideW} height={h} fill={C.accent+"15"} stroke={C.accent} strokeWidth={0.8}/>);
+    // Правая боковина
+    elems.push(<rect key="rb" x={ox+w-sideW} y={oy} width={sideW} height={h} fill={C.accent+"15"} stroke={C.accent} strokeWidth={0.8}/>);
+    // Крыша
+    elems.push(<rect key="top" x={ox+sideW} y={oy} width={w-sideW*2} height={sideW} fill={C.accent+"15"} stroke={C.accent} strokeWidth={0.8}/>);
+
+    if(!isAntresol){
+      // Дно на 60мм от пола
+      const bottomY=oy+h-60*sc;
+      elems.push(<rect key="btm" x={ox+sideW} y={bottomY} width={w-sideW*2} height={sideW} fill={C.accent+"15"} stroke={C.accent} strokeWidth={0.8}/>);
+      // Цоколь
+      const cokY=oy+h-44*sc;
+      elems.push(<rect key="cok" x={ox+sideW} y={cokY} width={w-sideW*2} height={44*sc} fill="none" stroke={C.textDim} strokeWidth={0.5} strokeDasharray="2,2"/>);
+      elems.push(<text key="cokL" x={ox+w/2} y={cokY+22*sc} textAnchor="middle" dominantBaseline="middle" fill={C.textDim} fontSize={6} fontFamily={FONT}>цоколь 44</text>);
+    } else {
+      // Антресоль — дно прямо у нижнего края
+      elems.push(<rect key="btm" x={ox+sideW} y={oy+h-sideW} width={w-sideW*2} height={sideW} fill={C.accent+"15"} stroke={C.accent} strokeWidth={0.8}/>);
+    }
+
+    if(mode==="closed"){
+      // === ВИД С ФАСАДАМИ ===
+      const doors=isAntresol?params.antresolDoors:params.doors;
+      const fg=mod.dim.fG;
+      const fW=mod.dim.fW*sc;
+      const fH=mod.dim.fH*sc;
+      const facadeY=oy+(isAntresol?sideW:sideW); // от крыши вниз
+      for(let i=0;i<doors;i++){
+        const fx=ox+(i*(mod.dim.fW+fg))*sc;
+        elems.push(<rect key={"f"+i} x={fx} y={facadeY} width={fW} height={fH} fill={C.blue+"18"} stroke={C.blue} strokeWidth={1} rx={2}/>);
+        // Петли
+        const hpp=mod.dim.hpp;
+        for(let hi=0;hi<hpp;hi++){
+          const py=facadeY+fH*(hi+1)/(hpp+1);
+          const px=fx+3;
+          elems.push(<circle key={"h"+i+"_"+hi} cx={px} cy={py} r={2.5} fill="none" stroke={C.accent} strokeWidth={0.7}/>);
+        }
+        // Размер фасада
+        if(i===0){
+          elems.push(<text key="fdim" x={fx+fW/2} y={facadeY+fH/2} textAnchor="middle" dominantBaseline="middle" fill={C.blue} fontSize={7} fontFamily={FONT} opacity={0.8}>{mod.dim.fH}×{mod.dim.fW}</text>);
+        }
+      }
+      // Зазоры между фасадами
+      if(doors>1){
+        for(let i=0;i<doors-1;i++){
+          const gx=ox+((i+1)*mod.dim.fW+i*fg)*sc;
+          elems.push(<line key={"gap"+i} x1={gx} y1={facadeY} x2={gx} y2={facadeY+fH} stroke={C.red} strokeWidth={0.5} strokeDasharray="2,1"/>);
+        }
+      }
+    } else {
+      // === ВИД БЕЗ ФАСАДОВ (наполнение) ===
+      const innerX=ox+sideW;
+      const innerTop=oy+sideW;
+      const innerBot=oy+h-(isAntresol?sideW:60*sc);
+      const innerH=innerBot-innerTop;
+      const innerWpx=w-sideW*2;
+
+      if(!isAntresol){
+        // Штанга
+        if(params.rod){
+          const rodY=oy+h-1800*sc;
+          if(rodY>innerTop){
+            elems.push(<line key="rod" x1={innerX+10} y1={rodY} x2={innerX+innerWpx-10} y2={rodY} stroke={C.green} strokeWidth={2} strokeLinecap="round"/>);
+            elems.push(<circle key="rodL" cx={innerX+10} cy={rodY} r={3} fill={C.green+"44"} stroke={C.green} strokeWidth={0.7}/>);
+            elems.push(<circle key="rodR" cx={innerX+innerWpx-10} cy={rodY} r={3} fill={C.green+"44"} stroke={C.green} strokeWidth={0.7}/>);
+            elems.push(<text key="rodT" x={innerX+innerWpx/2} y={rodY-6} textAnchor="middle" fill={C.green} fontSize={6} fontFamily={FONT}>штанга 1800</text>);
+
+            // Полка над штангой
+            if(params.shelfAboveRod){
+              const shelfY=rodY-70*sc;
+              elems.push(<rect key="shar" x={innerX} y={shelfY} width={innerWpx} height={sideW} fill={C.accent+"22"} stroke={C.accent} strokeWidth={0.6}/>);
+              elems.push(<text key="sharT" x={innerX+innerWpx/2} y={shelfY-5} textAnchor="middle" fill={C.textDim} fontSize={5} fontFamily={FONT}>полка +70</text>);
+            }
+          }
+        }
+
+        // Полки (равномерно в верхней части)
+        if(params.nS>0){
+          const shelfZone=innerH*0.45; // верхние 45%
+          const gap=shelfZone/(params.nS+1);
+          for(let i=0;i<params.nS;i++){
+            const sy=innerTop+gap*(i+1);
+            elems.push(<rect key={"sh"+i} x={innerX} y={sy} width={innerWpx} height={sideW} fill={C.accent+"22"} stroke={C.accent} strokeWidth={0.6}/>);
+            // Полкодержатели
+            elems.push(<circle key={"pkl"+i} cx={innerX+4} cy={sy+sideW/2} r={1.5} fill={C.accent}/>);
+            elems.push(<circle key={"pkr"+i} cx={innerX+innerWpx-4} cy={sy+sideW/2} r={1.5} fill={C.accent}/>);
+          }
+        }
+
+        // Ящики (внизу)
+        if(params.nD>0){
+          const drawerH=150*sc;
+          const gapH=30*sc;
+          for(let i=0;i<params.nD;i++){
+            const dy=innerBot-((params.nD-i)*(drawerH+gapH));
+            // Короб ящика
+            elems.push(<rect key={"dr"+i} x={innerX+16*sc} y={dy} width={innerWpx-32*sc} height={drawerH} fill={C.red+"12"} stroke={C.red} strokeWidth={0.7} rx={1}/>);
+            // Ручка
+            const hx=innerX+innerWpx/2;
+            elems.push(<line key={"drh"+i} x1={hx-12} y1={dy+drawerH/2} x2={hx+12} y2={dy+drawerH/2} stroke={C.red} strokeWidth={1.5} strokeLinecap="round"/>);
+          }
+        }
+      } else {
+        // Антресоль — полки
+        const aShelves=params.antresolShelves||0;
+        if(aShelves>0){
+          const gap=innerH/(aShelves+1);
+          for(let i=0;i<aShelves;i++){
+            const sy=innerTop+gap*(i+1);
+            elems.push(<rect key={"ash"+i} x={innerX} y={sy} width={innerWpx} height={sideW} fill={C.accentDim+"33"} stroke={C.accentDim} strokeWidth={0.6}/>);
+          }
+        }
+      }
+    }
+
+    return elems;
+  }
+
+  return <>
+    <div style={{display:"flex",gap:6,marginBottom:12}}>
+      {[{id:"closed",l:"С фасадами"},{id:"open",l:"Без фасадов"}].map(m=>
+        <button key={m.id} onClick={()=>setMode(m.id)} style={{
+          flex:1,padding:"10px",background:mode===m.id?C.accent:C.card,
+          color:mode===m.id?C.bg:C.text,border:`1px solid ${mode===m.id?C.accent:C.border}`,
+          borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:500,fontFamily:"'Jost',sans-serif"
+        }}>{m.l}</button>
+      )}
+    </div>
+    <div style={{background:C.card,borderRadius:12,padding:12,border:`1px solid ${C.border}`,overflowX:"auto"}}>
+      <svg width={svgW} height={svgH} style={{display:"block",margin:"0 auto"}}>
+        {/* Фон */}
+        <rect x={0} y={0} width={svgW} height={svgH} fill={C.bg} rx={8}/>
+
+        {r.split?<>
+          {/* Антресоль сверху */}
+          {drawModule(r.modules[1], 0, r.antresolH, r.cW, true)}
+          {/* Линия разделения */}
+          <line x1={PAD+DIM_OFF-5} y1={PAD+r.antresolH*sc} x2={PAD+DIM_OFF+r.cW*sc+5} y2={PAD+r.antresolH*sc} stroke={C.red} strokeWidth={1} strokeDasharray="4,3"/>
+          <text x={PAD+DIM_OFF+r.cW*sc+8} y={PAD+r.antresolH*sc} fill={C.red} fontSize={7} fontFamily={FONT} dominantBaseline="middle">стык</text>
+          {/* Нижний модуль */}
+          {drawModule(r.modules[0], r.antresolH, r.lowerH, r.cW, false)}
+
+          {/* Размеры */}
+          <DimLine x1={PAD+8} y1={PAD} x2={PAD+8} y2={PAD+r.antresolH*sc} label={r.antresolH+""} side="left"/>
+          <DimLine x1={PAD+8} y1={PAD+r.antresolH*sc} x2={PAD+8} y2={PAD+totalH*sc} label={r.lowerH+""} side="left"/>
+        </>:<>
+          {drawModule(r.modules?r.modules[0]:r, 0, r.dim.cH, r.dim.cW, false)}
+        </>}
+
+        {/* Общие размеры */}
+        <DimLine x1={PAD} y1={PAD} x2={PAD} y2={PAD+totalH*sc} label={totalH+""} side="left"/>
+        <DimLine x1={PAD+DIM_OFF} y1={PAD+totalH*sc+15} x2={PAD+DIM_OFF+totalW*sc} y2={PAD+totalH*sc+15} label={totalW+""} side="bottom"/>
+      </svg>
+    </div>
+    <div style={{marginTop:8,fontSize:11,color:C.textDim,textAlign:"center"}}>
+      {mode==="closed"?"Вид спереди • фасады закрыты":"Вид спереди • наполнение"}
+      {r.split&&" • 2 модуля"}
+    </div>
+  </>;
+}
+
 function App(){
   const[tab,sTab]=useState("params");
   const[cH,sCH]=useState(2500);
@@ -403,7 +608,7 @@ function App(){
   const r=useMemo(()=>calc({cH,nW,d,niche,bt,doors,nS,nD,rod,shelfAboveRod,antresolShelves,antresolDoors,fg:Number(fg),ldsp}),[cH,nW,d,niche,bt,doors,nS,nD,rod,shelfAboveRod,antresolShelves,antresolDoors,fg,ldsp]);
   const retail=Math.ceil(r.costs.t*mk);
 
-  const tabs=[{id:"params",l:"Параметры"},{id:"details",l:"Детали"},{id:"cutting",l:"Раскрой"},{id:"hardware",l:"Фурнитура"},{id:"cost",l:"Стоимость"}];
+  const tabs=[{id:"params",l:"Параметры"},{id:"sketch",l:"Скетч"},{id:"details",l:"Детали"},{id:"cutting",l:"Раскрой"},{id:"hardware",l:"Фурнитура"},{id:"cost",l:"Стоимость"}];
 
   const Card=({title,children})=><div style={{background:C.card,borderRadius:12,padding:16,marginBottom:12,border:`1px solid ${C.border}`}}>
     {title&&<div style={{fontSize:13,fontWeight:600,color:C.accent,marginBottom:12,textTransform:"uppercase",letterSpacing:1}}>{title}</div>}
@@ -477,6 +682,8 @@ function App(){
           {rod&&<Tog l="Полка над штангой" v={shelfAboveRod} set={sShelfAboveRod}/>}
         </Card>
       </>}
+
+      {tab==="sketch"&&<SketchView r={r} params={{doors,nS,nD,rod,shelfAboveRod,antresolShelves,antresolDoors,fg:Number(fg)}}/>}
 
       {tab==="details"&&<>
         <div style={{fontSize:12,color:C.textDim,marginBottom:8}}>
