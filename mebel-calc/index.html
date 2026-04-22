@@ -55,7 +55,7 @@ function calc(p){
   det.push({n:"Проставка опор",q:2,h:40,w:p.d-30,e1:[40],e04:[p.d-30]});
   det.push({n:"Цоколь планка",q:1,h:iW,w:44,e1:[iW,44,44],e04:[]});
   const bW=p.bt==="8"?cW-20:iW, bH=p.bt==="8"?cH-20:cH-76;
-  det.push({n:`ЗС ${p.bt}мм`,q:1,h:bH,w:bW,e1:[],e04:[],isB:true,bt:p.bt});
+  det.push({n:`ЗС ${p.bt}мм ЛДСП`,q:1,h:bH,w:bW,e1:[],e04:[],isB:true,bt:p.bt});
   if(p.bt==="8"){const pm=2*(bH+bW)/1000;qtr+=pm;srz+=Math.ceil(pm*5)+4;}
   const sW=iW,sD=iD-2;
   if(p.nS>0){det.push({n:"Полка",q:p.nS,h:sW,w:sD,e1:[sW],e04:[]});hw.push({n:"Полкодержатель",q:p.nS*4,p:HW.pk});dr5+=p.nS*4;}
@@ -85,7 +85,7 @@ function calc(p){
   const cutM=Math.ceil(tCut/1000*0.6);
   let lA=0;det.forEach(d=>{if(d.isB||d.dvp)return;lA+=(d.h*d.w*d.q)/1e6;});
   const sheets=Math.ceil(lA/SA*1.15),lC=sheets*LDSP[p.ldsp].ps;
-  const bA=(bH*bW)/1e6,bC=p.bt==="8"?Math.ceil(bA/SA*865*1.1):Math.ceil(bA/SA*LDSP[p.ldsp].ps*1.1);
+  const bA=(bH*bW)/1e6,bC=p.bt==="8"?Math.ceil(bA/SA*3535*1.1):Math.ceil(bA/SA*LDSP[p.ldsp].ps*1.1);
   let dvA=0;det.forEach(d=>{if(d.dvp)dvA+=(d.h*d.w*d.q)/1e6;});
   const dvC=Math.ceil(dvA/SA*865*1.1);
   const prC=Math.ceil(cutM*PR.c16+em04*PR.e04+em1*PR.e1+dr5*PR.d5+dr7*PR.d7+dr35*PR.d35+qtr*PR.qtr);
@@ -185,7 +185,7 @@ function App(){
           <Sel l="ЛДСП 16мм (Экспоторг)" v={ldsp} set={v=>sL(Number(v))}
             opts={LDSP.map((c,i)=>({v:i,l:`${c.name} — ${c.ps.toLocaleString("ru")}₽`}))}/>
           <Sel l="Задняя стенка" v={bt} set={sBt}
-            opts={[{v:"8",l:"ДВП 8мм (четверть, саморезы)"},{v:"16",l:"ЛДСП 16мм (конфирмат)"}]}/>
+            opts={[{v:"8",l:"ЛДСП 8мм (четверть, саморезы)"},{v:"16",l:"ЛДСП 16мм (конфирмат)"}]}/>
         </Card>
         <Card title="Фасады (распашные)">
           <In l="Количество дверей" v={doors} set={sDo} mn={1} mx={6}/>
