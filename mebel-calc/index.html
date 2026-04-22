@@ -252,15 +252,18 @@ function calc(p){
 function In({l,v,set,u="мм",mn=0,mx=9999,st=1}){
   const[local,setLocal]=useState(String(v));
   const[focused,setFocused]=useState(false);
+  // Sync from parent when not focused
+  const prev=React.useRef(v);
+  if(!focused&&prev.current!==v){prev.current=v;/* let displayed handle it */}
   const displayed=focused?local:String(v);
   return <div style={{marginBottom:12}}>
     <label style={{display:"block",fontSize:11,color:C.textDim,marginBottom:4,textTransform:"uppercase",letterSpacing:1}}>{l}</label>
     <div style={{display:"flex",alignItems:"center",gap:6}}>
-      <input type="number" inputMode="decimal" value={displayed}
-        onFocus={()=>{setLocal(String(v));setFocused(true);}}
-        onChange={e=>{const raw=e.target.value;setLocal(raw);const n=Number(raw);if(raw!==""&&!isNaN(n))set(n);}}
-        onBlur={()=>{setFocused(false);const n=Number(local);if(local===""||isNaN(n))set(mn||0);else set(Math.max(mn,Math.min(mx,n)));}}
-        min={mn} max={mx} step={st}
+      <input type="text" inputMode="decimal" pattern="[0-9]*\.?[0-9]*" value={displayed}
+        onFocus={e=>{setLocal(String(v));setFocused(true);e.target.select();}}
+        onChange={e=>{setLocal(e.target.value);}}
+        onBlur={()=>{setFocused(false);const n=Number(local);if(local===""||isNaN(n)){set(mn||0);}else{set(Math.max(mn,Math.min(mx,n)));}}}
+        onKeyDown={e=>{if(e.key==="Enter"){e.target.blur();}}}
         style={{width:"100%",padding:"10px 12px",background:C.inputBg,border:`1px solid ${C.border}`,borderRadius:8,color:C.white,fontSize:16,fontFamily:"'JetBrains Mono',monospace",outline:"none"}}/>
       <span style={{fontSize:12,color:C.textDim,minWidth:24}}>{u}</span>
     </div>
