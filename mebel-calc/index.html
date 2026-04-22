@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Мебель.Калк — Калькулятор мебели</title>
+<meta name="description" content="Быстрый расчёт себестоимости и розничной цены корпусной мебели. Реальные цены Экспоторг.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Jost:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { background: #0F0F0F; font-family: 'Jost', 'Segoe UI', sans-serif; overflow-x: hidden; }
+  input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type=number] { -moz-appearance: textfield; }
+  select { -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238A8278' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="text/babel">
+const { useState, useMemo } = React;
+
+const C = {
+  bg:"#0F0F0F",card:"#1A1A1A",border:"#2A2A2A",accent:"#C49448",accentDim:"#8B6A33",
+  text:"#E8E0D0",textDim:"#8A8278",green:"#4CAF50",red:"#CF6679",white:"#FFFFFF",
+  inputBg:"#141414",blue:"#5B9BD5"
+};
+
+const LDSP = [
+  {name:"Белый классич. W960",code:"W960",ps:3655},
+  {name:"Белый платин. W980",code:"W980",ps:3775},
+  {name:"Белый Премиум W1000",code:"W1000",ps:4205},
+  {name:"Альпина белая W1100",code:"W1100",ps:4330},
+  {name:"Дуб Бардолино H1145",code:"H1145",ps:4070},
+  {name:"Дуб Галифакс H1180",code:"H1180",ps:6815},
+  {name:"Дуб Шерман коньяк H1344",code:"H1344",ps:6815},
+  {name:"Берёза песочная H1732",code:"H1732",ps:4070},
+  {name:"Акация Лэйклэнд H1277",code:"H1277",ps:4205},
+  {name:"Сосна Касцина H1401",code:"H1401",ps:4330},
+];
+const SA=5.796;
+const PR={c16:60,e04:69,e1:76.5,d5:13,d7:19,d35:58,qtr:58};
+const HW={conf:1.5,pk:.71,s4x16:.51,hng:137.5,r400:737,r450:759,r500:825,sh:250,shh:35};
+
+function calc(p){
+  const det=[],hw=[];
+  let cuts=0,e04t=0,e1t=0,dr5=0,dr7=0,dr35=0,qtr=0,srz=0;
+  const cH=p.cH-8, cW=p.niche?p.nW-5:p.nW, bT=p.bt==="8"?8:16, iD=p.d-bT, iW=cW-32;
+  det.push({n:"Боковина",q:2,h:cH,w:p.d,e1:[cH],e04:[cH,p.d,p.d]});
+  det.push({n:"Дно",q:1,h:iW,w:p.d,e1:[iW],e04:[p.d,p.d]});
+  det.push({n:"Крыша",q:1,h:iW,w:p.d,e1:[iW],e04:[p.d,p.d]});
+  det.push({n:"Проставка опор",q:2,h:40,w:p.d-30,e1:[40],e04:[p.d-30]});
+  det.push({n:"Цоколь планка",q:1,h:iW,w:44,e1:[iW,44,44],e04:[]});
+  const bW=p.bt==="8"?cW-20:iW, bH=p.bt==="8"?cH-20:cH-76;
+  det.push({n:`ЗС ${p.bt}мм`,q:1,h:bH,w:bW,e1:[],e04:[],isB:true,bt:p.bt});
+  if(p.bt==="8"){const pm=2*(bH+bW)/1000;qtr+=pm;srz+=Math.ceil(pm*5)+4;}
+  const sW=iW,sD=iD-2;
+  if(p.nS>0){det.push({n:"Полка",q:p.nS,h:sW,w:sD,e1:[sW],e04:[]});hw.push({n:"Полкодержатель",q:p.nS*4,p:HW.pk});dr5+=p.nS*4;}
+  if(p.rod){hw.push({n:`Штанга ${sW}мм`,q:1,p:Math.ceil(sW/1000*HW.sh)});hw.push({n:"Штангодержатель",q:2,p:HW.shh});}
+  if(p.nD>0){
+    const dIW=sW-42,dH=150,dDI=sD-50;
+    det.push({n:"Проставка напр.",q:2,h:p.nD*(dH+30),w:16,e1:[],e04:[p.nD*(dH+30)]});
+    det.push({n:"Бок. ящика",q:p.nD*2,h:dDI,w:dH,e1:[dDI],e04:[dH,dH,dDI]});
+    det.push({n:"Перед/зад ящ.",q:p.nD*2,h:dIW-32,w:dH,e1:[],e04:[dIW-32,dH,dH]});
+    det.push({n:"Дно ящ. ДВП",q:p.nD,h:dIW-4,w:dDI-4,e1:[],e04:[],dvp:true});
+    let rp=HW.r500;if(p.d<=450)rp=HW.r400;else if(p.d<=500)rp=HW.r450;
+    hw.push({n:`Направл. ${p.d<=450?400:p.d<=500?450:500}мм`,q:p.nD,p:rp});
+  }
+  const fH=cH-76;
+  let fG=p.fg,fW=Math.floor((cW-(p.doors-1)*fG)/p.doors);
+  const rm=cW-(fW*p.doors+(p.doors-1)*fG);
+  if(rm!==0&&p.doors>1){const ag=fG===3?2:3;const aw=Math.floor((cW-(p.doors-1)*ag)/p.doors);const ar=cW-(aw*p.doors+(p.doors-1)*ag);if(Math.abs(ar)<Math.abs(rm)){fG=ag;fW=aw;}}
+  det.push({n:"Фасад",q:p.doors,h:fH,w:fW,e1:[fH,fH,fW,fW],e04:[],fc:true});
+  let hpp=2;if(fH>850)hpp=3;if(fH>1300)hpp=4;if(fH>1700)hpp=5;if(fH>2200)hpp=6;
+  const tH=p.doors*hpp;
+  hw.push({n:"Петля Clip-on",q:tH,p:HW.hng});dr35+=tH;
+  const ppj=p.d<=600?2:3;hw.push({n:"Конфирмат",q:4*ppj,p:HW.conf});dr7+=4*ppj*2;
+  let t04=0,t1=0;
+  det.forEach(d=>{if(d.isB||d.dvp)return;t04+=(d.e04||[]).reduce((a,b)=>a+b,0)*d.q;t1+=(d.e1||[]).reduce((a,b)=>a+b,0)*d.q;});
+  const em04=Math.ceil(t04/1000*1.1),em1=Math.ceil(t1/1000*1.1);
+  let tCut=0;det.forEach(d=>{if(d.dvp)return;tCut+=(d.h+d.w)*2*d.q;});
+  const cutM=Math.ceil(tCut/1000*0.6);
+  let lA=0;det.forEach(d=>{if(d.isB||d.dvp)return;lA+=(d.h*d.w*d.q)/1e6;});
+  const sheets=Math.ceil(lA/SA*1.15),lC=sheets*LDSP[p.ldsp].ps;
+  const bA=(bH*bW)/1e6,bC=p.bt==="8"?Math.ceil(bA/SA*865*1.1):Math.ceil(bA/SA*LDSP[p.ldsp].ps*1.1);
+  let dvA=0;det.forEach(d=>{if(d.dvp)dvA+=(d.h*d.w*d.q)/1e6;});
+  const dvC=Math.ceil(dvA/SA*865*1.1);
+  const prC=Math.ceil(cutM*PR.c16+em04*PR.e04+em1*PR.e1+dr5*PR.d5+dr7*PR.d7+dr35*PR.d35+qtr*PR.qtr);
+  const edC=Math.ceil(em04*18+em1*44);
+  const hwC=Math.ceil(hw.reduce((s,h)=>s+h.q*h.p,0)+srz*HW.s4x16);
+  const tot=lC+bC+dvC+prC+edC+hwC;
+  return{det,hw,e04:em04,e1:em1,cutM,costs:{l:lC,b:bC,dv:dvC,pr:prC,ed:edC,hw:hwC,t:tot},sheets,dim:{cH,cW,iW,fH,fW,fG,hpp}};
+}
+
+function In({l,v,set,u="мм",mn=0,mx=9999,st=1}){
+  return <div style={{marginBottom:12}}>
+    <label style={{display:"block",fontSize:11,color:C.textDim,marginBottom:4,textTransform:"uppercase",letterSpacing:1}}>{l}</label>
+    <div style={{display:"flex",alignItems:"center",gap:6}}>
+      <input type="number" value={v} onChange={e=>set(Number(e.target.value))} min={mn} max={mx} step={st}
+        style={{width:"100%",padding:"10px 12px",background:C.inputBg,border:`1px solid ${C.border}`,borderRadius:8,color:C.white,fontSize:16,fontFamily:"'JetBrains Mono',monospace",outline:"none"}}/>
+      <span style={{fontSize:12,color:C.textDim,minWidth:24}}>{u}</span>
+    </div>
+  </div>;
+}
+
+function Sel({l,v,set,opts}){
+  return <div style={{marginBottom:12}}>
+    <label style={{display:"block",fontSize:11,color:C.textDim,marginBottom:4,textTransform:"uppercase",letterSpacing:1}}>{l}</label>
+    <select value={v} onChange={e=>set(e.target.value)}
+      style={{width:"100%",padding:"10px 12px",background:C.inputBg,border:`1px solid ${C.border}`,borderRadius:8,color:C.white,fontSize:14,outline:"none",cursor:"pointer",paddingRight:32}}>
+      {opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+    </select>
+  </div>;
+}
+
+function Tog({l,v,set}){
+  return <div onClick={()=>set(!v)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 0",cursor:"pointer",userSelect:"none"}}>
+    <span style={{fontSize:13,color:C.text}}>{l}</span>
+    <div style={{width:44,height:24,borderRadius:12,background:v?C.accent:C.border,position:"relative",transition:"background .2s"}}>
+      <div style={{width:18,height:18,borderRadius:9,background:C.white,position:"absolute",top:3,left:v?23:3,transition:"left .2s"}}/>
+    </div>
+  </div>;
+}
+
+function App(){
+  const[tab,sTab]=useState("params");
+  const[cH,sCH]=useState(2500);
+  const[nW,sNW]=useState(1800);
+  const[d,sD]=useState(600);
+  const[niche,sNi]=useState(false);
+  const[bt,sBt]=useState("8");
+  const[doors,sDo]=useState(2);
+  const[nS,sNS]=useState(5);
+  const[nD,sND]=useState(2);
+  const[rod,sRod]=useState(true);
+  const[fg,sFg]=useState(3);
+  const[ldsp,sL]=useState(0);
+  const[mk,sMk]=useState(2.5);
+
+  const r=useMemo(()=>calc({cH,nW,d,niche,bt,doors,nS,nD,rod,fg:Number(fg),ldsp}),[cH,nW,d,niche,bt,doors,nS,nD,rod,fg,ldsp]);
+  const retail=Math.ceil(r.costs.t*mk);
+
+  const tabs=[{id:"params",l:"Параметры"},{id:"details",l:"Детали"},{id:"hardware",l:"Фурнитура"},{id:"cost",l:"Стоимость"}];
+
+  const Card=({title,children})=><div style={{background:C.card,borderRadius:12,padding:16,marginBottom:12,border:`1px solid ${C.border}`}}>
+    {title&&<div style={{fontSize:13,fontWeight:600,color:C.accent,marginBottom:12,textTransform:"uppercase",letterSpacing:1}}>{title}</div>}
+    {children}
+  </div>;
+
+  return <div style={{minHeight:"100vh",background:C.bg,color:C.text,fontFamily:"'Jost','Segoe UI',sans-serif"}}>
+    <div style={{padding:"16px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <div>
+        <h1 style={{margin:0,fontFamily:"'Bebas Neue',sans-serif",fontSize:24,color:C.accent,letterSpacing:2}}>МЕБЕЛЬ.КАЛК</h1>
+        <span style={{fontSize:10,color:C.textDim,letterSpacing:1}}>TECH7GROUP • v2</span>
+      </div>
+      <div style={{textAlign:"right"}}>
+        <div style={{fontSize:10,color:C.textDim}}>себес</div>
+        <div style={{fontSize:15,fontFamily:"'JetBrains Mono',monospace",color:C.accent}}>{r.costs.t.toLocaleString("ru")} ₽</div>
+        <div style={{fontSize:22,fontFamily:"'JetBrains Mono',monospace",color:C.green,fontWeight:500}}>{retail.toLocaleString("ru")} ₽</div>
+        <div style={{fontSize:10,color:C.textDim}}>розница ×{mk}</div>
+      </div>
+    </div>
+
+    <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,overflow:"auto"}}>
+      {tabs.map(t=><button key={t.id} onClick={()=>sTab(t.id)} style={{flex:1,padding:"12px 8px",background:"none",border:"none",borderBottom:tab===t.id?`2px solid ${C.accent}`:"2px solid transparent",color:tab===t.id?C.accent:C.textDim,fontSize:12,fontWeight:500,cursor:"pointer",textTransform:"uppercase",letterSpacing:.5,whiteSpace:"nowrap",fontFamily:"'Jost',sans-serif"}}>{t.l}</button>)}
+    </div>
+
+    <div style={{padding:"16px 20px",maxWidth:480,margin:"0 auto",paddingBottom:80}}>
+
+      {tab==="params"&&<>
+        <Card title="Габариты">
+          <In l="Высота потолка" v={cH} set={sCH}/>
+          <In l="Ширина (или ниша)" v={nW} set={sNW}/>
+          <In l="Глубина" v={d} set={sD}/>
+          <Tog l="Встройка в нишу" v={niche} set={sNi}/>
+          <div style={{marginTop:8,padding:"8px 12px",background:C.inputBg,borderRadius:8,fontSize:12,color:C.textDim}}>
+            Корпус: {r.dim.cH}×{r.dim.cW}×{d} мм
+            {r.dim.cH>2770&&<div style={{color:C.red,marginTop:4}}>⚠ {r.dim.cH}мм &gt; 2770 — бить на модули!</div>}
+          </div>
+        </Card>
+        <Card title="Материал">
+          <Sel l="ЛДСП 16мм (Экспоторг)" v={ldsp} set={v=>sL(Number(v))}
+            opts={LDSP.map((c,i)=>({v:i,l:`${c.name} — ${c.ps.toLocaleString("ru")}₽`}))}/>
+          <Sel l="Задняя стенка" v={bt} set={sBt}
+            opts={[{v:"8",l:"ДВП 8мм (четверть, саморезы)"},{v:"16",l:"ЛДСП 16мм (конфирмат)"}]}/>
+        </Card>
+        <Card title="Фасады (распашные)">
+          <In l="Количество дверей" v={doors} set={sDo} mn={1} mx={6}/>
+          <Sel l="Зазор между фасадами" v={fg} set={v=>sFg(Number(v))}
+            opts={[{v:2,l:"2 мм"},{v:3,l:"3 мм"}]}/>
+          <div style={{padding:"8px 12px",background:C.inputBg,borderRadius:8,fontSize:12,color:C.textDim}}>
+            Фасад: {r.dim.fH}×{r.dim.fW} мм • Зазор: {r.dim.fG}мм • Петель: {r.dim.hpp}
+          </div>
+        </Card>
+        <Card title="Наполнение">
+          <In l="Полки (съёмные)" v={nS} set={sNS} mn={0} mx={12}/>
+          <In l="Ящики" v={nD} set={sND} mn={0} mx={6}/>
+          <Tog l="Штанга для одежды" v={rod} set={sRod}/>
+        </Card>
+      </>}
+
+      {tab==="details"&&<>
+        <div style={{fontSize:12,color:C.textDim,marginBottom:8}}>Деталировка • ЛДСП 16мм • Листов: {r.sheets}</div>
+        {r.det.map((d,i)=><div key={i} style={{background:C.card,borderRadius:10,padding:"10px 14px",marginBottom:5,border:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:14,fontWeight:500}}>{d.n}</div>
+            <div style={{fontSize:12,color:C.textDim,fontFamily:"'JetBrains Mono',monospace",marginTop:2}}>
+              {d.h}×{d.w}
+              {d.e1&&d.e1.length>0&&<span style={{color:C.accent}}> • 1мм:{d.e1.length}ст</span>}
+              {d.e04&&d.e04.length>0&&<span> • 0.4:{d.e04.length}ст</span>}
+            </div>
+          </div>
+          <div style={{background:C.accent,color:C.bg,borderRadius:6,padding:"4px 10px",fontSize:14,fontWeight:600,fontFamily:"'JetBrains Mono',monospace"}}>×{d.q}</div>
+        </div>)}
+        <div style={{marginTop:12,padding:"10px 14px",background:C.card,borderRadius:10,border:`1px solid ${C.border}`,fontSize:13}}>
+          <div style={{color:C.textDim,marginBottom:4}}>Кромка / Распил</div>
+          0.4мм: ~{r.e04} п.м. • 1мм: ~{r.e1} п.м. • Распил: ~{r.cutM} п.м.
+        </div>
+      </>}
+
+      {tab==="hardware"&&<>
+        <div style={{fontSize:12,color:C.textDim,marginBottom:8}}>Фурнитура (опт Экспоторг)</div>
+        {r.hw.map((h,i)=><div key={i} style={{background:C.card,borderRadius:10,padding:"10px 14px",marginBottom:5,border:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:500}}>{h.n}</div>
+            <div style={{fontSize:12,color:C.textDim,fontFamily:"'JetBrains Mono',monospace",marginTop:2}}>{h.p.toLocaleString("ru")} ₽</div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{background:C.accentDim,color:C.white,borderRadius:6,padding:"3px 8px",fontSize:13,fontWeight:600,fontFamily:"'JetBrains Mono',monospace"}}>×{h.q}</div>
+            <div style={{fontSize:11,color:C.textDim,marginTop:3}}>{Math.ceil(h.q*h.p).toLocaleString("ru")} ₽</div>
+          </div>
+        </div>)}
+      </>}
+
+      {tab==="cost"&&<>
+        <Card>
+          <div style={{fontSize:13,fontWeight:600,color:C.accent,marginBottom:16,textTransform:"uppercase",letterSpacing:1}}>Себестоимость</div>
+          {[
+            {l:"ЛДСП 16мм ("+r.sheets+" лист.)",v:r.costs.l},
+            {l:`ЗС ${bt}мм`,v:r.costs.b},
+            {l:"ДВП (дно ящиков)",v:r.costs.dv},
+          ].map((x,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 0 5px 12px",borderBottom:`1px solid ${C.border}`}}>
+            <span style={{fontSize:12,color:C.textDim}}>{x.l}</span>
+            <span style={{fontSize:13,fontFamily:"'JetBrains Mono',monospace"}}>{x.v.toLocaleString("ru")} ₽</span>
+          </div>)}
+          <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0 6px"}}>
+            <span style={{fontSize:13,color:C.blue,fontWeight:500}}>Материалы</span>
+            <span style={{fontSize:14,fontFamily:"'JetBrains Mono',monospace",color:C.blue}}>{(r.costs.l+r.costs.b+r.costs.dv).toLocaleString("ru")} ₽</span>
+          </div>
+          {[
+            {l:"Обработка (распил+присадка)",v:r.costs.pr},
+            {l:"Кромка (материал)",v:r.costs.ed},
+          ].map((x,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 0 5px 12px",borderBottom:`1px solid ${C.border}`}}>
+            <span style={{fontSize:12,color:C.textDim}}>{x.l}</span>
+            <span style={{fontSize:13,fontFamily:"'JetBrains Mono',monospace"}}>{x.v.toLocaleString("ru")} ₽</span>
+          </div>)}
+          <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0 6px"}}>
+            <span style={{fontSize:13,color:C.blue,fontWeight:500}}>Обработка</span>
+            <span style={{fontSize:14,fontFamily:"'JetBrains Mono',monospace",color:C.blue}}>{(r.costs.pr+r.costs.ed).toLocaleString("ru")} ₽</span>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0 5px 12px",borderBottom:`1px solid ${C.border}`}}>
+            <span style={{fontSize:12,color:C.textDim}}>Фурнитура и крепёж</span>
+            <span style={{fontSize:13,fontFamily:"'JetBrains Mono',monospace"}}>{r.costs.hw.toLocaleString("ru")} ₽</span>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",padding:"14px 0 0",marginTop:8}}>
+            <span style={{fontSize:16,fontWeight:600}}>СЕБЕСТОИМОСТЬ</span>
+            <span style={{fontSize:20,fontFamily:"'JetBrains Mono',monospace",fontWeight:600,color:C.accent}}>{r.costs.t.toLocaleString("ru")} ₽</span>
+          </div>
+        </Card>
+
+        <Card title="Розничная цена">
+          <In l="Коэффициент наценки" v={mk} set={sMk} u="×" mn={1} mx={10} st={0.1}/>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 0"}}>
+            <span style={{fontSize:15,fontWeight:600}}>Цена клиенту</span>
+            <span style={{fontSize:28,fontFamily:"'JetBrains Mono',monospace",fontWeight:600,color:C.green}}>{retail.toLocaleString("ru")} ₽</span>
+          </div>
+          <div style={{fontSize:12,color:C.textDim,textAlign:"right"}}>
+            Маржа: {(retail-r.costs.t).toLocaleString("ru")} ₽ ({Math.round((1-r.costs.t/retail)*100)}%)
+          </div>
+        </Card>
+
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+          {[2.0,2.5,3.0].map(m=><button key={m} onClick={()=>sMk(m)} style={{padding:"12px 8px",background:mk===m?C.accent:C.card,color:mk===m?C.bg:C.text,border:`1px solid ${mk===m?C.accent:C.border}`,borderRadius:10,cursor:"pointer",textAlign:"center",fontFamily:"'JetBrains Mono',monospace"}}>
+            <div style={{fontSize:18,fontWeight:600}}>×{m}</div>
+            <div style={{fontSize:11,marginTop:2,opacity:.7}}>{Math.ceil(r.costs.t*m).toLocaleString("ru")} ₽</div>
+          </button>)}
+        </div>
+      </>}
+    </div>
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
