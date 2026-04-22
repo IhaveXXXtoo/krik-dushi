@@ -81,18 +81,30 @@ function calc(p){
   let t04=0,t1=0;
   det.forEach(d=>{if(d.isB||d.dvp)return;t04+=(d.e04||[]).reduce((a,b)=>a+b,0)*d.q;t1+=(d.e1||[]).reduce((a,b)=>a+b,0)*d.q;});
   const em04=Math.ceil(t04/1000*1.1),em1=Math.ceil(t1/1000*1.1);
-  let tCut=0;det.forEach(d=>{if(d.dvp)return;tCut+=(d.h+d.w)*2*d.q;});
-  const cutM=Math.ceil(tCut/1000*0.6);
+  // Распил: каждая деталь = 2 реза (по длине + по ширине), считаем максимальный из двух размеров
+  let tCut=0;det.forEach(d=>{if(d.dvp)return;tCut+=(Math.max(d.h,d.w)+Math.min(d.h,d.w))*d.q;});
+  const cutM=Math.ceil(tCut/1000);
+  // Присадка: торцевые под шканты (по 2 на каждый конфирмат), под полкодержатели в боковинах
+  const drTorz=dr7; // торцевое под каждый конфирмат
+  dr5+=p.nS*4; // отверстия в боковинах под полкодержатели (в пласть)
+  // Листы: 75% полезного использования листа
   let lA=0;det.forEach(d=>{if(d.isB||d.dvp)return;lA+=(d.h*d.w*d.q)/1e6;});
-  const sheets=Math.ceil(lA/SA*1.15),lC=sheets*LDSP[p.ldsp].ps;
-  const bA=(bH*bW)/1e6,bC=p.bt==="8"?Math.ceil(bA/SA*3535*1.1):Math.ceil(bA/SA*LDSP[p.ldsp].ps*1.1);
+  const sheets=Math.ceil(lA/(SA*0.75)),lC=sheets*LDSP[p.ldsp].ps;
+  // ЗС: 8мм = ЛДСП 3535₽/лист, 16мм = тот же декор
+  const bA=(bH*bW)/1e6,bC=p.bt==="8"?Math.ceil(bA/(SA*0.75)*3535):Math.ceil(bA/(SA*0.75)*LDSP[p.ldsp].ps);
+  // Дно ящиков ДВП 3мм = ХДФ 865₽/лист
   let dvA=0;det.forEach(d=>{if(d.dvp)dvA+=(d.h*d.w*d.q)/1e6;});
-  const dvC=Math.ceil(dvA/SA*865*1.1);
-  const prC=Math.ceil(cutM*PR.c16+em04*PR.e04+em1*PR.e1+dr5*PR.d5+dr7*PR.d7+dr35*PR.d35+qtr*PR.qtr);
+  const dvC=dvA>0?Math.ceil(Math.max(1,dvA/(SA*0.75))*865):0;
+  // Обработка
+  const prC=Math.ceil(cutM*PR.c16+em04*PR.e04+em1*PR.e1+dr5*PR.d5+dr7*PR.d7+drTorz*PR.d7+dr35*PR.d35+qtr*PR.qtr);
+  // Кромка материал
   const edC=Math.ceil(em04*18+em1*44);
+  // Фурнитура
   const hwC=Math.ceil(hw.reduce((s,h)=>s+h.q*h.p,0)+srz*HW.s4x16);
-  const tot=lC+bC+dvC+prC+edC+hwC;
-  return{det,hw,e04:em04,e1:em1,cutM,costs:{l:lC,b:bC,dv:dvC,pr:prC,ed:edC,hw:hwC,t:tot},sheets,dim:{cH,cW,iW,fH,fW,fG,hpp}};
+  // Упаковка: картон 120₽/м², ~2м² на модуль
+  const packC=Math.ceil(2*120);
+  const tot=lC+bC+dvC+prC+edC+hwC+packC;
+  return{det,hw,e04:em04,e1:em1,cutM,drTorz,costs:{l:lC,b:bC,dv:dvC,pr:prC,ed:edC,hw:hwC,pack:packC,t:tot},sheets,dim:{cH,cW,iW,fH,fW,fG,hpp}};
 }
 
 function In({l,v,set,u="мм",mn=0,mx=9999,st=1}){
@@ -264,6 +276,10 @@ function App(){
           <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0 5px 12px",borderBottom:`1px solid ${C.border}`}}>
             <span style={{fontSize:12,color:C.textDim}}>Фурнитура и крепёж</span>
             <span style={{fontSize:13,fontFamily:"'JetBrains Mono',monospace"}}>{r.costs.hw.toLocaleString("ru")} ₽</span>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0 5px 12px",borderBottom:`1px solid ${C.border}`}}>
+            <span style={{fontSize:12,color:C.textDim}}>Упаковка</span>
+            <span style={{fontSize:13,fontFamily:"'JetBrains Mono',monospace"}}>{r.costs.pack.toLocaleString("ru")} ₽</span>
           </div>
           <div style={{display:"flex",justifyContent:"space-between",padding:"14px 0 0",marginTop:8}}>
             <span style={{fontSize:16,fontWeight:600}}>СЕБЕСТОИМОСТЬ</span>
